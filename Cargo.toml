@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "crates/netconv-core",
+    "crates/netconv-parser-ios",
+    "crates/netconv-render-vrp",
+    "crates/netconv-wasm",
+    "cli",
+]
+resolver = "2"

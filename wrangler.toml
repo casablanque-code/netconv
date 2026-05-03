@@ -1,0 +1,17 @@
+name = "netconv"
+main = "web/worker.js"
+compatibility_date = "2024-01-01"
+
+[build]
+command = "wasm-pack build crates/netconv-wasm --target bundler --out-dir ../../web/wasm"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+# После сборки WASM раскомментируй:
+# [[wasm_modules]]
+# [wasm_modules.NETCONV_WASM]
+# binding = "NETCONV_WASM"
+# source = "web/wasm/netconv_wasm_bg.wasm"

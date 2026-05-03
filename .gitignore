@@ -1,0 +1,7 @@
+/target
+**/target/
+Cargo.lock
+*.wasm
+web/wasm/
+*.tar.gz
+.wrangler/
