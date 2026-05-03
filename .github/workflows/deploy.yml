@@ -1,14 +1,17 @@
-name: Deploy
-on: [push]
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - run: wasm-pack build crates/netconv-wasm --target bundler --out-dir ../../web/wasm
+- name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Add wasm-pack to PATH
+        # Это критический шаг: прокидываем путь к бинарникам Cargo в системный PATH экшена
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Build WASM manually
+        # Собираем сами ДО вызова wrangler-action, чтобы не зависеть от его внутренних механизмов
+        run: wasm-pack build crates/netconv-wasm --target bundler --out-dir ../../web/wasm
+
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Важно: если ты уже собрал билд вручную, можно попробовать 
+          # либо отключить билд в wrangler.toml, либо убедиться, что он не упадет повторно.
