@@ -1,17 +1,15 @@
 name = "netconv"
 main = "web/worker.js"
-compatibility_date = "2024-01-01"
+compatibility_date = "2024-09-23"
 
-[build]
-command = "wasm-pack build crates/netconv-wasm --target bundler --out-dir ../../web/wasm"
-
+# HTML файлы — импортируются как текст в worker.js
 [[rules]]
 type = "Text"
 globs = ["**/*.html"]
 fallthrough = true
 
-# После сборки WASM раскомментируй:
-# [[wasm_modules]]
-# [wasm_modules.NETCONV_WASM]
-# binding = "NETCONV_WASM"
-# source = "web/wasm/netconv_wasm_bg.wasm"
+# WASM и JS файлы из web/wasm/ деплоятся как статические ассеты
+# Собираются в CI через wasm-pack перед деплоем
+[assets]
+directory = "web"
+binding = "ASSETS"

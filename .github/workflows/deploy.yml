@@ -1,17 +1,51 @@
-- name: Install wasm-pack
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # ручной запуск из GitHub UI
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.75"
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      - name: Add wasm-pack to PATH
-        # Это критический шаг: прокидываем путь к бинарникам Cargo в системный PATH экшена
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Build WASM
+        run: |
+          wasm-pack build crates/netconv-wasm \
+            --target web \
+            --out-dir ../../web/wasm \
+            --release
 
-      - name: Build WASM manually
-        # Собираем сами ДО вызова wrangler-action, чтобы не зависеть от его внутренних механизмов
-        run: wasm-pack build crates/netconv-wasm --target bundler --out-dir ../../web/wasm
-
-      - name: Deploy to Cloudflare
+      - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          # Важно: если ты уже собрал билд вручную, можно попробовать 
-          # либо отключить билд в wrangler.toml, либо убедиться, что он не упадет повторно.
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: deploy
