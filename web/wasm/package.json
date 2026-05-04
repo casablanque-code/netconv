@@ -1,0 +1,15 @@
+{
+  "name": "netconv-wasm",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "netconv_wasm_bg.wasm",
+    "netconv_wasm.js",
+    "netconv_wasm.d.ts"
+  ],
+  "main": "netconv_wasm.js",
+  "types": "netconv_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
