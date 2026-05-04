@@ -271,76 +271,357 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
         report.add_exact("bgp.router_id", &format!("bgp router-id {}", rid), &format!("router-id {}", rid));
     }
 
-    for neighbor in &bgp.neighbors {
-        // Cisco: neighbor 1.2.3.4 remote-as 65001
-        // VRP:   peer 1.2.3.4 as-number 65001
-        out.push(format!(" peer {} as-number {}", neighbor.address, neighbor.remote_as));
+    if bgp.log_neighbor_changes {
+        out.push(" peer log-change".to_string());
         report.add_approximate(
-            "bgp.neighbor",
-            &format!("neighbor {} remote-as {}", neighbor.address, neighbor.remote_as),
-            &format!("peer {} as-number {}", neighbor.address, neighbor.remote_as),
-            "VRP BGP использует 'peer' вместо 'neighbor' и 'as-number' вместо 'remote-as'",
+            "bgp.log",
+            "bgp log-neighbor-changes",
+            "peer log-change",
+            "VRP: 'peer log-change' вместо 'bgp log-neighbor-changes'",
         );
-
-        if let Some(desc) = &neighbor.description {
-            out.push(format!(" peer {} description {}", neighbor.address, desc));
-            report.add_exact(
-                "bgp.neighbor.description",
-                &format!("neighbor {} description {}", neighbor.address, desc),
-                &format!("peer {} description {}", neighbor.address, desc),
-            );
-        }
-
-        if let Some(src) = &neighbor.update_source {
-            out.push(format!(" peer {} connect-interface {}", neighbor.address, src));
-            report.add_approximate(
-                "bgp.update_source",
-                &format!("neighbor {} update-source {}", neighbor.address, src),
-                &format!("peer {} connect-interface {}", neighbor.address, src),
-                "VRP: 'connect-interface' вместо 'update-source'",
-            );
-        }
-
-        if neighbor.next_hop_self {
-            out.push(format!(" peer {} next-hop-local", neighbor.address));
-            report.add_approximate(
-                "bgp.next_hop_self",
-                &format!("neighbor {} next-hop-self", neighbor.address),
-                &format!("peer {} next-hop-local", neighbor.address),
-                "VRP: 'next-hop-local' вместо 'next-hop-self'",
-            );
-        }
-
-        if neighbor.shutdown {
-            out.push(format!(" peer {} ignore", neighbor.address));
-            report.add_approximate(
-                "bgp.shutdown",
-                &format!("neighbor {} shutdown", neighbor.address),
-                &format!("peer {} ignore", neighbor.address),
-                "VRP: 'peer X ignore' для administrative shutdown BGP соседа",
-            );
-        }
     }
 
-    // IPv4 unicast address-family
-    if !bgp.networks.is_empty() {
+    // Peer groups — сначала объявляем группы, потом привязываем соседей
+    for pg in &bgp.peer_groups {
+        render_bgp_peer_group(pg, out, report);
+    }
+
+    // Neighbors
+    for neighbor in &bgp.neighbors {
+        render_bgp_neighbor(neighbor, out, report);
+    }
+
+    // Глобальные networks → ipv4-family unicast
+    let has_global_nets = !bgp.networks.is_empty();
+    let has_global_redist = !bgp.redistribute.is_empty();
+
+    // Собираем все address-family блоки
+    // Если есть глобальные network/redistribute — добавляем их в ipv4 unicast
+    if has_global_nets || has_global_redist {
         out.push(" #".to_string());
         out.push(" ipv4-family unicast".to_string());
+
         for net in &bgp.networks {
             let mask = prefix_len_to_mask(net.prefix_len());
-            out.push(format!("  network {} {}", net.addr(), mask));
+            let cmd = format!("  network {} {}", net.addr(), mask);
+            out.push(cmd.clone());
             report.add_approximate(
                 "bgp.network",
                 &format!("network {} mask {}", net.addr(), mask),
-                &format!("network {} {} (inside ipv4-family)", net.addr(), mask),
-                "VRP: network команда находится внутри ipv4-family unicast блока",
+                &cmd,
+                "VRP: network внутри ipv4-family unicast",
             );
         }
+
+        for redist in &bgp.redistribute {
+            render_bgp_redistribute(redist, out, report);
+        }
+
+        // Активируем всех соседей в ipv4 unicast по умолчанию
+        for neighbor in &bgp.neighbors {
+            out.push(format!("  peer {} enable", neighbor.address));
+        }
+
         out.push(" #".to_string());
+    }
+
+    // Явные address-family блоки
+    for af in &bgp.address_families {
+        render_bgp_address_family(af, bgp, out, report);
     }
 
     out.push("#".to_string());
     out.push(String::new());
+}
+
+fn render_bgp_peer_group(pg: &BgpPeerGroup, out: &mut Vec<String>, report: &mut ConversionReport) {
+    // Cisco: neighbor PEER-GROUP peer-group
+    // VRP:   peer-group PEER-GROUP
+    out.push(format!(" peer-group {}", pg.name));
+    report.add_approximate(
+        "bgp.peer_group",
+        &format!("neighbor {} peer-group", pg.name),
+        &format!("peer-group {}", pg.name),
+        "VRP: 'peer-group NAME' вместо 'neighbor NAME peer-group'",
+    );
+
+    if let Some(asn) = pg.remote_as {
+        out.push(format!(" peer-group {} as-number {}", pg.name, asn));
+        report.add_approximate(
+            "bgp.peer_group.as",
+            &format!("neighbor {} remote-as {}", pg.name, asn),
+            &format!("peer-group {} as-number {}", pg.name, asn),
+            "VRP: peer-group remote-as задаётся через 'peer-group NAME as-number'",
+        );
+    }
+
+    if let Some(src) = &pg.update_source {
+        out.push(format!(" peer-group {} connect-interface {}", pg.name, src));
+        report.add_approximate(
+            "bgp.peer_group.source",
+            &format!("neighbor {} update-source {}", pg.name, src),
+            &format!("peer-group {} connect-interface {}", pg.name, src),
+            "VRP: 'connect-interface' вместо 'update-source'",
+        );
+    }
+}
+
+fn render_bgp_neighbor(neighbor: &BgpNeighbor, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let addr = &neighbor.address;
+
+    if neighbor.remote_as > 0 {
+        out.push(format!(" peer {} as-number {}", addr, neighbor.remote_as));
+        report.add_approximate(
+            "bgp.neighbor",
+            &format!("neighbor {} remote-as {}", addr, neighbor.remote_as),
+            &format!("peer {} as-number {}", addr, neighbor.remote_as),
+            "VRP BGP: 'peer' вместо 'neighbor', 'as-number' вместо 'remote-as'",
+        );
+    }
+
+    if let Some(pg) = &neighbor.peer_group {
+        out.push(format!(" peer {} group {}", addr, pg));
+        report.add_approximate(
+            "bgp.neighbor.peer_group",
+            &format!("neighbor {} peer-group {}", addr, pg),
+            &format!("peer {} group {}", addr, pg),
+            "VRP: 'peer X group NAME' вместо 'neighbor X peer-group NAME'",
+        );
+    }
+
+    if let Some(desc) = &neighbor.description {
+        out.push(format!(" peer {} description {}", addr, desc));
+        report.add_exact(
+            "bgp.neighbor.description",
+            &format!("neighbor {} description {}", addr, desc),
+            &format!("peer {} description {}", addr, desc),
+        );
+    }
+
+    if let Some(src) = &neighbor.update_source {
+        out.push(format!(" peer {} connect-interface {}", addr, src));
+        report.add_approximate(
+            "bgp.update_source",
+            &format!("neighbor {} update-source {}", addr, src),
+            &format!("peer {} connect-interface {}", addr, src),
+            "VRP: 'connect-interface' вместо 'update-source'",
+        );
+    }
+
+    if neighbor.next_hop_self {
+        out.push(format!(" peer {} next-hop-local", addr));
+        report.add_approximate(
+            "bgp.next_hop_self",
+            &format!("neighbor {} next-hop-self", addr),
+            &format!("peer {} next-hop-local", addr),
+            "VRP: 'next-hop-local' вместо 'next-hop-self'",
+        );
+    }
+
+    if neighbor.send_community {
+        out.push(format!(" peer {} advertise-community", addr));
+        report.add_approximate(
+            "bgp.send_community",
+            &format!("neighbor {} send-community", addr),
+            &format!("peer {} advertise-community", addr),
+            "VRP: 'advertise-community' вместо 'send-community'",
+        );
+    }
+
+    if neighbor.remove_private_as {
+        out.push(format!(" peer {} public-as-only", addr));
+        report.add_approximate(
+            "bgp.remove_private_as",
+            &format!("neighbor {} remove-private-as", addr),
+            &format!("peer {} public-as-only", addr),
+            "VRP: 'public-as-only' вместо 'remove-private-as'",
+        );
+    }
+
+    if neighbor.shutdown {
+        out.push(format!(" peer {} ignore", addr));
+        report.add_approximate(
+            "bgp.shutdown",
+            &format!("neighbor {} shutdown", addr),
+            &format!("peer {} ignore", addr),
+            "VRP: 'peer X ignore' для administrative shutdown",
+        );
+    }
+
+    if let Some(rm) = &neighbor.route_map_in {
+        out.push(format!(" peer {} route-policy {} import", addr, rm));
+        report.add_approximate(
+            "bgp.route_map",
+            &format!("neighbor {} route-map {} in", addr, rm),
+            &format!("peer {} route-policy {} import", addr, rm),
+            "VRP: route-map → route-policy, in/out → import/export",
+        );
+    }
+
+    if let Some(rm) = &neighbor.route_map_out {
+        out.push(format!(" peer {} route-policy {} export", addr, rm));
+        report.add_approximate(
+            "bgp.route_map",
+            &format!("neighbor {} route-map {} out", addr, rm),
+            &format!("peer {} route-policy {} export", addr, rm),
+            "VRP: route-map → route-policy, in/out → import/export",
+        );
+    }
+
+    if let Some(pl) = &neighbor.prefix_list_in {
+        out.push(format!(" peer {} ip-prefix {} import", addr, pl));
+        report.add_approximate(
+            "bgp.prefix_list",
+            &format!("neighbor {} prefix-list {} in", addr, pl),
+            &format!("peer {} ip-prefix {} import", addr, pl),
+            "VRP: ip-prefix вместо prefix-list, import/export вместо in/out",
+        );
+    }
+
+    if let Some(pl) = &neighbor.prefix_list_out {
+        out.push(format!(" peer {} ip-prefix {} export", addr, pl));
+        report.add_approximate(
+            "bgp.prefix_list",
+            &format!("neighbor {} prefix-list {} out", addr, pl),
+            &format!("peer {} ip-prefix {} export", addr, pl),
+            "VRP: ip-prefix вместо prefix-list, import/export вместо in/out",
+        );
+    }
+
+    if neighbor.soft_reconfiguration {
+        // VRP не требует soft-reconfiguration inbound — route refresh поддерживается нативно
+        out.push(format!(" # neighbor {} soft-reconfiguration inbound — не нужно на VRP (route-refresh нативный)", addr));
+        report.add_approximate(
+            "bgp.soft_reconfiguration",
+            &format!("neighbor {} soft-reconfiguration inbound", addr),
+            "# not needed",
+            "VRP поддерживает Route Refresh (RFC 2918) нативно — soft-reconfiguration не нужен",
+        );
+    }
+}
+
+fn render_bgp_address_family(
+    af: &BgpAddressFamily,
+    _bgp: &BgpConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
+    // Cisco: address-family ipv4 unicast
+    // VRP:   ipv4-family unicast  (внутри bgp блока)
+    let (vrp_family, ios_family) = match (&af.afi, &af.safi) {
+        (BgpAfi::Ipv4, BgpSafi::Unicast)   => ("ipv4-family unicast",   "address-family ipv4 unicast"),
+        (BgpAfi::Ipv4, BgpSafi::Multicast)  => ("ipv4-family multicast", "address-family ipv4 multicast"),
+        (BgpAfi::Ipv4, BgpSafi::Labeled)    => ("ipv4-family labeled-unicast", "address-family ipv4 labeled-unicast"),
+        (BgpAfi::Ipv6, BgpSafi::Unicast)    => ("ipv6-family unicast",   "address-family ipv6 unicast"),
+        (BgpAfi::Vpnv4, _)                  => ("vpnv4-family",          "address-family vpnv4"),
+        (BgpAfi::L2vpn, BgpSafi::Evpn)      => ("l2vpn-family evpn",     "address-family l2vpn evpn"),
+        _                                    => ("ipv4-family unicast",   "address-family ipv4"),
+    };
+
+    out.push(" #".to_string());
+    out.push(format!(" {}", vrp_family));
+
+    report.add_approximate(
+        "bgp.address_family",
+        ios_family,
+        vrp_family,
+        "VRP: ipv4-family вместо address-family ipv4; синтаксис блока совпадает",
+    );
+
+    // networks
+    for net in &af.networks {
+        let mask = prefix_len_to_mask(net.prefix_len());
+        out.push(format!("  network {} {}", net.addr(), mask));
+        report.add_exact(
+            "bgp.af.network",
+            &format!("network {} mask {}", net.addr(), mask),
+            &format!("network {} {}", net.addr(), mask),
+        );
+    }
+
+    // redistribute
+    for redist in &af.redistribute {
+        render_bgp_redistribute(redist, out, report);
+    }
+
+    // aggregate-address
+    for agg in &af.aggregate_addresses {
+        let mask = prefix_len_to_mask(agg.prefix.prefix_len());
+        let so = if agg.summary_only { " detail-suppressed" } else { "" };
+        out.push(format!("  aggregate {} {}{}", agg.prefix.addr(), mask, so));
+        report.add_approximate(
+            "bgp.aggregate",
+            &format!("aggregate-address {} {}{}", agg.prefix.addr(), mask,
+                if agg.summary_only { " summary-only" } else { "" }),
+            &format!("aggregate {} {}{}", agg.prefix.addr(), mask, so),
+            "VRP: 'aggregate' вместо 'aggregate-address', 'detail-suppressed' вместо 'summary-only'",
+        );
+    }
+
+    // neighbor activate — на VRP это peer enable внутри af блока
+    for addr in &af.activated_neighbors {
+        out.push(format!("  peer {} enable", addr));
+        report.add_approximate(
+            "bgp.af.activate",
+            &format!("neighbor {} activate", addr),
+            &format!("peer {} enable", addr),
+            "VRP: 'peer X enable' внутри af блока вместо 'neighbor X activate'",
+        );
+    }
+
+    // per-af neighbor настройки
+    for n in &af.neighbor_settings {
+        if n.next_hop_self {
+            out.push(format!("  peer {} next-hop-local", n.address));
+        }
+        if let Some(rm) = &n.route_map_in {
+            out.push(format!("  peer {} route-policy {} import", n.address, rm));
+        }
+        if let Some(rm) = &n.route_map_out {
+            out.push(format!("  peer {} route-policy {} export", n.address, rm));
+        }
+        if n.soft_reconfiguration {
+            out.push(format!("  # peer {} soft-reconfiguration — не нужно на VRP", n.address));
+        }
+        if n.default_originate {
+            out.push(format!("  peer {} default-route-advertise", n.address));
+            report.add_approximate(
+                "bgp.af.default_originate",
+                &format!("neighbor {} default-originate", n.address),
+                &format!("peer {} default-route-advertise", n.address),
+                "VRP: 'default-route-advertise' вместо 'default-originate'",
+            );
+        }
+    }
+
+    out.push(" #".to_string());
+}
+
+fn render_bgp_redistribute(redist: &OspfRedistribute, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let (vrp_src, ios_src) = match &redist.source {
+        RedistributeSource::Connected => ("direct",   "connected"),
+        RedistributeSource::Static    => ("static",   "static"),
+        RedistributeSource::Rip       => ("rip",      "rip"),
+        RedistributeSource::Bgp(_)    => return, // BGP в BGP не редистрибутят
+        RedistributeSource::Eigrp(_)  => {
+            report.add_manual(
+                "bgp.redistribute.eigrp",
+                "redistribute eigrp",
+                "EIGRP не поддерживается на VRP",
+                None,
+            );
+            return;
+        }
+    };
+
+    let cmd = format!("  import-route {}", vrp_src);
+    out.push(cmd.clone());
+    report.add_approximate(
+        "bgp.redistribute",
+        &format!("redistribute {}", ios_src),
+        &cmd,
+        "VRP BGP: import-route вместо redistribute",
+    );
 }
 
 // ---------------------------------------------------------------------------

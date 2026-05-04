@@ -162,4 +162,116 @@ snmp-server location Moscow DC-1
         assert_eq!(cfg.ntp.len(), 2);
         assert!(cfg.ntp[0].prefer);
     }
+
+    // BGP tests
+    const BGP_CONFIG: &str = r#"
+hostname BGP-RTR-01
+!
+router bgp 65001
+ bgp router-id 1.1.1.1
+ bgp log-neighbor-changes
+ neighbor IBGP-PEERS peer-group
+ neighbor IBGP-PEERS remote-as 65001
+ neighbor IBGP-PEERS update-source Loopback0
+ neighbor IBGP-PEERS next-hop-self
+ neighbor 10.0.0.2 peer-group IBGP-PEERS
+ neighbor 10.0.0.2 description RR-CLIENT-MSK
+ neighbor 10.0.0.3 remote-as 65002
+ neighbor 10.0.0.3 description EBGP-PEER
+ neighbor 10.0.0.3 route-map RM-IN in
+ neighbor 10.0.0.3 route-map RM-OUT out
+ neighbor 10.0.0.3 send-community
+ neighbor 10.0.0.3 remove-private-as
+ !
+ address-family ipv4
+  network 192.168.0.0 mask 255.255.255.0
+  network 10.0.0.0 mask 255.255.0.0
+  redistribute connected
+  aggregate-address 10.0.0.0 255.255.0.0 summary-only
+  neighbor IBGP-PEERS activate
+  neighbor 10.0.0.2 activate
+  neighbor 10.0.0.3 activate
+  neighbor 10.0.0.3 soft-reconfiguration inbound
+  neighbor 10.0.0.3 default-originate
+  exit-address-family
+"#;
+
+    #[test]
+    fn test_bgp_basic() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(BGP_CONFIG).unwrap();
+        let bgp = cfg.routing.bgp.as_ref().unwrap();
+        assert_eq!(bgp.asn, 65001);
+        assert_eq!(bgp.router_id, Some("1.1.1.1".parse().unwrap()));
+        assert!(bgp.log_neighbor_changes);
+    }
+
+    #[test]
+    fn test_bgp_peer_group() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(BGP_CONFIG).unwrap();
+        let bgp = cfg.routing.bgp.as_ref().unwrap();
+        assert_eq!(bgp.peer_groups.len(), 1);
+        assert_eq!(bgp.peer_groups[0].name, "IBGP-PEERS");
+    }
+
+    #[test]
+    fn test_bgp_neighbors() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(BGP_CONFIG).unwrap();
+        let bgp = cfg.routing.bgp.as_ref().unwrap();
+
+        let n02 = bgp.neighbors.iter()
+            .find(|n| n.address == netconv_core::ir::BgpNeighborAddr::Ip("10.0.0.2".parse().unwrap()))
+            .unwrap();
+        assert_eq!(n02.peer_group, Some("IBGP-PEERS".to_string()));
+        assert_eq!(n02.description, Some("RR-CLIENT-MSK".to_string()));
+
+        let n03 = bgp.neighbors.iter()
+            .find(|n| n.address == netconv_core::ir::BgpNeighborAddr::Ip("10.0.0.3".parse().unwrap()))
+            .unwrap();
+        assert_eq!(n03.remote_as, 65002);
+        assert_eq!(n03.route_map_in, Some("RM-IN".to_string()));
+        assert_eq!(n03.route_map_out, Some("RM-OUT".to_string()));
+        assert!(n03.send_community);
+        assert!(n03.remove_private_as);
+    }
+
+    #[test]
+    fn test_bgp_address_family() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(BGP_CONFIG).unwrap();
+        let bgp = cfg.routing.bgp.as_ref().unwrap();
+
+        assert_eq!(bgp.address_families.len(), 1);
+        let af = &bgp.address_families[0];
+        assert_eq!(af.afi, netconv_core::ir::BgpAfi::Ipv4);
+        assert_eq!(af.safi, netconv_core::ir::BgpSafi::Unicast);
+        assert_eq!(af.networks.len(), 2);
+        assert!(af.networks.iter().any(|n| n.to_string() == "192.168.0.0/24"));
+        assert!(af.networks.iter().any(|n| n.to_string() == "10.0.0.0/16"));
+        assert_eq!(af.redistribute.len(), 1);
+        assert!(matches!(af.redistribute[0].source, netconv_core::ir::RedistributeSource::Connected));
+        assert_eq!(af.aggregate_addresses.len(), 1);
+        assert!(af.aggregate_addresses[0].summary_only);
+        assert_eq!(af.activated_neighbors.len(), 3);
+
+        let n03_af = af.neighbor_settings.iter()
+            .find(|n| n.address == netconv_core::ir::BgpNeighborAddr::Ip("10.0.0.3".parse().unwrap()))
+            .unwrap();
+        assert!(n03_af.soft_reconfiguration);
+        assert!(n03_af.default_originate);
+    }
+
+    #[test]
+    fn test_bgp_no_unknown_address_family() {
+        let parser = IosParser;
+        let (_, report) = parser.parse(BGP_CONFIG).unwrap();
+        let af_unknowns: Vec<_> = report.items.iter()
+            .filter(|i| i.severity == netconv_core::report::Severity::Info
+                && i.source_snippet.contains("address-family"))
+            .collect();
+        assert!(af_unknowns.is_empty(),
+            "address-family в unknown: {:?}", af_unknowns);
+    }
 }

@@ -636,21 +636,37 @@ impl SemanticParser {
             asn,
             router_id: None,
             neighbors: vec![],
+            peer_groups: vec![],
             networks: vec![],
+            address_families: vec![],
+            redistribute: vec![],
+            log_neighbor_changes: false,
+            bestpath: None,
         };
 
         for child in &node.children {
             let tokens: Vec<&str> = child.text.split_whitespace().collect();
             match tokens.first() {
-                Some(&"bgp") if tokens.get(1) == Some(&"router-id") => {
-                    bgp.router_id = tokens.get(2).and_then(|s| s.parse().ok());
-                }
+                Some(&"bgp") => self.parse_bgp_global_cmd(&tokens[1..], &mut bgp),
                 Some(&"neighbor") => {
-                    self.parse_bgp_neighbor(&tokens[1..], &mut bgp.neighbors);
+                    self.parse_bgp_neighbor_cmd(&tokens[1..], &mut bgp.neighbors, &mut bgp.peer_groups);
                 }
                 Some(&"network") => {
                     if let Some(net) = self.parse_bgp_network(&tokens[1..]) {
                         bgp.networks.push(net);
+                    }
+                }
+                Some(&"redistribute") => {
+                    if let Some(r) = self.parse_ospf_redistribute(&tokens[1..]) {
+                        bgp.redistribute.push(r);
+                    }
+                }
+                Some(&"address-family") => {
+                    // address-family ipv4 [unicast|multicast]
+                    // address-family ipv6 [unicast]
+                    // address-family vpnv4
+                    if let Some(af) = self.parse_address_family(asn, child, report) {
+                        bgp.address_families.push(af);
                     }
                 }
                 _ => {
@@ -662,28 +678,94 @@ impl SemanticParser {
         bgp
     }
 
-    fn parse_bgp_neighbor(&self, tokens: &[&str], neighbors: &mut Vec<BgpNeighbor>) {
-        let addr: IpAddr = match tokens.first().and_then(|s| s.parse().ok()) {
-            Some(a) => a,
-            None => return,
-        };
+    fn parse_bgp_global_cmd(&self, tokens: &[&str], bgp: &mut BgpConfig) {
+        match tokens.first() {
+            Some(&"router-id") => {
+                bgp.router_id = tokens.get(1).and_then(|s| s.parse().ok());
+            }
+            Some(&"log-neighbor-changes") => {
+                bgp.log_neighbor_changes = true;
+            }
+            Some(&"bestpath") => {
+                bgp.bestpath = Some(tokens[1..].join(" "));
+            }
+            _ => {}
+        }
+    }
 
-        let n = neighbors.iter_mut().find(|n| n.address == addr);
-        let neighbor = if let Some(existing) = n {
-            existing
+    fn parse_bgp_neighbor_cmd(
+        &self,
+        tokens: &[&str],
+        neighbors: &mut Vec<BgpNeighbor>,
+        peer_groups: &mut Vec<BgpPeerGroup>,
+    ) {
+        if tokens.is_empty() { return; }
+
+        let addr_str = tokens[0];
+
+        // Определяем: IP адрес или имя peer-group
+        let addr = if let Ok(ip) = addr_str.parse::<IpAddr>() {
+            BgpNeighborAddr::Ip(ip)
         } else {
-            neighbors.push(BgpNeighbor {
-                address: addr,
-                remote_as: 0,
-                description: None,
-                update_source: None,
-                next_hop_self: false,
-                password: None,
-                shutdown: false,
-            });
-            neighbors.last_mut().unwrap()
+            // Имя peer-group
+            BgpNeighborAddr::PeerGroup(addr_str.to_string())
         };
 
+        // Команда: neighbor <addr> peer-group [name] — создаёт peer-group
+        if tokens.get(1) == Some(&"peer-group") && tokens.len() == 2 {
+            // neighbor PEER-GROUP-NAME peer-group — объявление группы
+            if let BgpNeighborAddr::PeerGroup(ref name) = addr {
+                if !peer_groups.iter().any(|pg| &pg.name == name) {
+                    peer_groups.push(BgpPeerGroup {
+                        name: name.clone(),
+                        remote_as: None,
+                        update_source: None,
+                        next_hop_self: false,
+                        route_map_in: None,
+                        route_map_out: None,
+                        send_community: false,
+                    });
+                }
+            }
+            return;
+        }
+
+        // Ищем или создаём neighbour запись
+        let neighbor = match neighbors.iter_mut().find(|n| n.address == addr) {
+            Some(n) => n,
+            None => {
+                neighbors.push(BgpNeighbor {
+                    address: addr,
+                    remote_as: 0,
+                    description: None,
+                    update_source: None,
+                    next_hop_self: false,
+                    password: None,
+                    shutdown: false,
+                    peer_group: None,
+                    route_map_in: None,
+                    route_map_out: None,
+                    prefix_list_in: None,
+                    prefix_list_out: None,
+                    soft_reconfiguration: false,
+                    send_community: false,
+                    remove_private_as: false,
+                    default_originate: false,
+                    activate: false,
+                });
+                neighbors.last_mut().unwrap()
+            }
+        };
+
+        self.apply_bgp_neighbor_attr(tokens, neighbor, peer_groups);
+    }
+
+    fn apply_bgp_neighbor_attr(
+        &self,
+        tokens: &[&str],
+        neighbor: &mut BgpNeighbor,
+        _peer_groups: &mut Vec<BgpPeerGroup>,
+    ) {
         match tokens.get(1) {
             Some(&"remote-as") => {
                 neighbor.remote_as = tokens.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -696,11 +778,178 @@ impl SemanticParser {
             }
             Some(&"next-hop-self") => { neighbor.next_hop_self = true; }
             Some(&"password") => {
-                neighbor.password = tokens.get(2).map(|s| s.to_string());
+                neighbor.password = tokens.get(3).map(|s| s.to_string()); // password 0|7 <key>
             }
             Some(&"shutdown") => { neighbor.shutdown = true; }
+            Some(&"peer-group") => {
+                // neighbor 1.2.3.4 peer-group MY-PEERS — привязка к группе
+                neighbor.peer_group = tokens.get(2).map(|s| s.to_string());
+            }
+            Some(&"route-map") => {
+                let name = tokens.get(2).map(|s| s.to_string());
+                match tokens.get(3) {
+                    Some(&"in")  => neighbor.route_map_in  = name,
+                    Some(&"out") => neighbor.route_map_out = name,
+                    _ => {}
+                }
+            }
+            Some(&"prefix-list") => {
+                let name = tokens.get(2).map(|s| s.to_string());
+                match tokens.get(3) {
+                    Some(&"in")  => neighbor.prefix_list_in  = name,
+                    Some(&"out") => neighbor.prefix_list_out = name,
+                    _ => {}
+                }
+            }
+            Some(&"soft-reconfiguration") => { neighbor.soft_reconfiguration = true; }
+            Some(&"send-community") => { neighbor.send_community = true; }
+            Some(&"remove-private-as") => { neighbor.remove_private_as = true; }
+            Some(&"default-originate") => { neighbor.default_originate = true; }
+            Some(&"activate") => { neighbor.activate = true; }
             _ => {}
         }
+    }
+
+    fn parse_address_family(
+        &self,
+        asn: u32,
+        node: &RawNode,
+        report: &mut ConversionReport,
+    ) -> Option<BgpAddressFamily> {
+        // address-family ipv4 [unicast|multicast|labeled-unicast]
+        // address-family ipv6 unicast
+        // address-family vpnv4
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+
+        let afi = match tokens.get(1) {
+            Some(&"ipv4")   => BgpAfi::Ipv4,
+            Some(&"ipv6")   => BgpAfi::Ipv6,
+            Some(&"vpnv4")  => BgpAfi::Vpnv4,
+            Some(&"l2vpn")  => BgpAfi::L2vpn,
+            _ => BgpAfi::Ipv4, // default
+        };
+
+        let safi = match tokens.get(2) {
+            Some(&"multicast")       => BgpSafi::Multicast,
+            Some(&"labeled-unicast") => BgpSafi::Labeled,
+            Some(&"evpn")            => BgpSafi::Evpn,
+            _                        => BgpSafi::Unicast,
+        };
+
+        let mut af = BgpAddressFamily {
+            afi,
+            safi,
+            networks: vec![],
+            redistribute: vec![],
+            activated_neighbors: vec![],
+            deactivated_neighbors: vec![],
+            neighbor_settings: vec![],
+            default_information: false,
+            aggregate_addresses: vec![],
+        };
+
+        for child in &node.children {
+            let ct: Vec<&str> = child.text.split_whitespace().collect();
+            match ct.first() {
+                Some(&"network") => {
+                    if let Some(net) = self.parse_bgp_network(&ct[1..]) {
+                        af.networks.push(net);
+                    }
+                }
+                Some(&"redistribute") => {
+                    if let Some(r) = self.parse_ospf_redistribute(&ct[1..]) {
+                        af.redistribute.push(r);
+                    }
+                }
+                Some(&"neighbor") => {
+                    if ct.len() < 3 { continue; }
+                    let addr = if let Ok(ip) = ct[1].parse::<IpAddr>() {
+                        BgpNeighborAddr::Ip(ip)
+                    } else {
+                        BgpNeighborAddr::PeerGroup(ct[1].to_string())
+                    };
+
+                    match ct.get(2) {
+                        Some(&"activate") => {
+                            af.activated_neighbors.push(addr);
+                        }
+                        _ if ct.get(1) == Some(&"no") && ct.get(3) == Some(&"activate") => {
+                            af.deactivated_neighbors.push(addr);
+                        }
+                        _ => {
+                            // Другие per-af neighbour настройки
+                            // ct = ["neighbor", "10.0.0.3", "soft-reconfiguration", ...]
+                            // apply_bgp_neighbor_attr ожидает [addr, attr, ...]
+                            // поэтому передаём &ct[1..]
+                            let existing = af.neighbor_settings.iter_mut()
+                                .find(|n| n.address == addr);
+                            if let Some(n) = existing {
+                                self.apply_bgp_neighbor_attr(&ct[1..], n, &mut vec![]);
+                            } else {
+                                let mut n = BgpNeighbor {
+                                    address: addr,
+                                    remote_as: 0,
+                                    description: None,
+                                    update_source: None,
+                                    next_hop_self: false,
+                                    password: None,
+                                    shutdown: false,
+                                    peer_group: None,
+                                    route_map_in: None,
+                                    route_map_out: None,
+                                    prefix_list_in: None,
+                                    prefix_list_out: None,
+                                    soft_reconfiguration: false,
+                                    send_community: false,
+                                    remove_private_as: false,
+                                    default_originate: false,
+                                    activate: false,
+                                };
+                                self.apply_bgp_neighbor_attr(&ct[1..], &mut n, &mut vec![]);
+                                af.neighbor_settings.push(n);
+                            }
+                        }
+                    }
+                }
+                Some(&"default-information") => {
+                    af.default_information = true;
+                }
+                Some(&"aggregate-address") => {
+                    if let Some(agg) = self.parse_aggregate_address(&ct[1..]) {
+                        af.aggregate_addresses.push(agg);
+                    }
+                }
+                Some(&"exit-address-family") => break,
+                _ => {
+                    report.add_unknown(child.full(), &format!("router bgp {} address-family", asn));
+                }
+            }
+        }
+
+        Some(af)
+    }
+
+    fn parse_aggregate_address(&self, tokens: &[&str]) -> Option<BgpAggregate> {
+        // aggregate-address <prefix/len> [summary-only] [as-set]
+        // aggregate-address <addr> <mask> [summary-only] [as-set]
+        if tokens.is_empty() { return None; }
+
+        let prefix = if tokens[0].contains('/') {
+            tokens[0].parse().ok()?
+        } else if tokens.len() >= 2 {
+            let addr: IpAddr = tokens[0].parse().ok()?;
+            let mask: IpAddr = tokens[1].parse().ok()?;
+            let plen = mask_to_prefix_len(mask)?;
+            format!("{}/{}", addr, plen).parse().ok()?
+        } else {
+            return None;
+        };
+
+        Some(BgpAggregate {
+            prefix,
+            summary_only: tokens.contains(&"summary-only"),
+            as_set: tokens.contains(&"as-set"),
+        })
     }
 
     fn parse_bgp_network(&self, tokens: &[&str]) -> Option<IpNet> {

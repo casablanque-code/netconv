@@ -301,18 +301,100 @@ pub struct BgpConfig {
     pub asn: u32,
     pub router_id: Option<IpAddr>,
     pub neighbors: Vec<BgpNeighbor>,
+    pub peer_groups: Vec<BgpPeerGroup>,
+    /// Сети из глобального контекста (без address-family)
     pub networks: Vec<IpNet>,
+    /// address-family блоки
+    pub address_families: Vec<BgpAddressFamily>,
+    pub redistribute: Vec<OspfRedistribute>,
+    pub log_neighbor_changes: bool,
+    pub bestpath: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BgpNeighbor {
-    pub address: IpAddr,
+    pub address: BgpNeighborAddr,
     pub remote_as: u32,
     pub description: Option<String>,
     pub update_source: Option<String>,
     pub next_hop_self: bool,
     pub password: Option<String>,
     pub shutdown: bool,
+    pub peer_group: Option<String>,
+    pub route_map_in: Option<String>,
+    pub route_map_out: Option<String>,
+    pub prefix_list_in: Option<String>,
+    pub prefix_list_out: Option<String>,
+    pub soft_reconfiguration: bool,
+    pub send_community: bool,
+    pub remove_private_as: bool,
+    pub default_originate: bool,
+    pub activate: bool,
+}
+
+/// Адрес соседа — IP или имя peer-group
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum BgpNeighborAddr {
+    Ip(IpAddr),
+    PeerGroup(String),
+}
+
+impl std::fmt::Display for BgpNeighborAddr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BgpNeighborAddr::Ip(ip) => write!(f, "{}", ip),
+            BgpNeighborAddr::PeerGroup(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BgpPeerGroup {
+    pub name: String,
+    pub remote_as: Option<u32>,
+    pub update_source: Option<String>,
+    pub next_hop_self: bool,
+    pub route_map_in: Option<String>,
+    pub route_map_out: Option<String>,
+    pub send_community: bool,
+}
+
+/// address-family ipv4/ipv6/vpnv4 unicast/multicast
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BgpAddressFamily {
+    pub afi: BgpAfi,
+    pub safi: BgpSafi,
+    pub networks: Vec<IpNet>,
+    pub redistribute: Vec<OspfRedistribute>,
+    /// neighbor activate / no neighbor activate
+    pub activated_neighbors: Vec<BgpNeighborAddr>,
+    pub deactivated_neighbors: Vec<BgpNeighborAddr>,
+    pub neighbor_settings: Vec<BgpNeighbor>,
+    pub default_information: bool,
+    pub aggregate_addresses: Vec<BgpAggregate>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum BgpAfi {
+    Ipv4,
+    Ipv6,
+    Vpnv4,
+    L2vpn,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum BgpSafi {
+    Unicast,
+    Multicast,
+    Labeled,
+    Evpn,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BgpAggregate {
+    pub prefix: IpNet,
+    pub summary_only: bool,
+    pub as_set: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
