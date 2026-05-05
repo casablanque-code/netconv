@@ -97,21 +97,30 @@ fn render_stp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
         StpMode::Mst       => ("mstp",  "mst"),
         StpMode::Rstp      => ("rstp",  "rstp"),
     };
-    out.push(format!("stp mode {}", vrp_mode));
     if matches!(stp.mode, StpMode::RapidPvst | StpMode::Pvst) {
-        out.push("# ⚠ HIGH RISK: RSTP — одно дерево для всех VLAN (не per-vlan как PVST+).".to_string());
-        out.push("#   Топология может измениться если разные VLAN имели разные root bridge.".to_string());
-        out.push("#   Рекомендация: stp mode mstp + instance per VLAN group.".to_string());
+        // Рекомендация идёт первой — пользователь видит её до команды
+        out.push(format!("# ⚠ HIGH RISK: Cisco {} использует per-VLAN STP деревья.", vrp_mode));
+        out.push("#   На Huawei RSTP — одно дерево для всех VLAN.".to_string());
+        out.push("#   Если разные VLAN имели разные root bridge — топология изменится.".to_string());
+        out.push("#".to_string());
+        out.push("#   Рекомендуется MSTP (раскомментируй и настрой):".to_string());
+        out.push("#   stp mode mstp".to_string());
+        out.push("#   stp region-configuration".to_string());
+        out.push("#    region-name MY_REGION".to_string());
+        out.push("#    instance 1 vlan 10 20 30  # <- укажи свои VLAN".to_string());
+        out.push("#    active region-configuration".to_string());
+        out.push("#".to_string());
+        out.push("#   Fallback (одно дерево, может изменить топологию):".to_string());
     }
+    out.push(format!("stp mode {}", vrp_mode));
     report.add_manual(
         "stp.mode",
         &format!("spanning-tree mode {}", ios_mode),
         &format!(
-            "HIGH RISK: Cisco {} — per-VLAN деревья. Huawei RSTP — одно дерево. \
-             Топология может измениться. Рекомендуется MSTP.",
+            "HIGH RISK: Cisco {} — per-VLAN STP. Huawei RSTP — одно дерево для всех VLAN.              Топология может измениться. Настоятельно рекомендуется MSTP.",
             ios_mode
         ),
-        Some("stp mode mstp → stp region-configuration → instance N vlan X"),
+        Some("stp mode mstp → stp region-configuration → instance N vlan X → active region-configuration"),
     );
 
     if stp.loopguard {
@@ -310,10 +319,25 @@ fn render_platform_specific(cfg: &NetworkConfig, out: &mut Vec<String>) {
     if cfg.platform_specific.is_empty() { return; }
     out.push("#".to_string());
     out.push("# ============================================================".to_string());
-    out.push("# ПЛАТФОРМО-СПЕЦИФИЧНЫЕ КОМАНДЫ (нет аналога на VRP):".to_string());
+    out.push("# ПЛАТФОРМО-СПЕЦИФИЧНЫЕ КОМАНДЫ (нет прямого аналога на VRP):".to_string());
     out.push("# ============================================================".to_string());
     for block in &cfg.platform_specific {
-        out.push(format!("# [line {}] {}", block.line, block.raw));
+        // enable secret — особый случай, выводим развёрнутый manual комментарий
+        if block.raw.starts_with("enable secret") || block.raw.starts_with("enable password") {
+            out.push("#".to_string());
+            out.push("# MANUAL: Cisco enable secret/password cannot be migrated directly.".to_string());
+            out.push("#   On VRP there is no direct equivalent of enable-mode password.".to_string());
+            out.push("#   Configure privileged access manually:".to_string());
+            out.push("#     Option A — local AAA:".to_string());
+            out.push("#       aaa authentication login default local".to_string());
+            out.push("#       local-user admin password irreversible-cipher <PASSWORD>".to_string());
+            out.push("#       local-user admin privilege level 15".to_string());
+            out.push("#     Option B — RADIUS/TACACS+:".to_string());
+            out.push("#       Configure server-group and authentication scheme.".to_string());
+            out.push(format!("#   Source: {}", block.raw));
+        } else {
+            out.push(format!("# [line {}] {}", block.line, block.raw));
+        }
     }
     out.push(String::new());
 }

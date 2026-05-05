@@ -47,24 +47,15 @@ impl SemanticParser {
             "banner" => {
                 cfg.banner = Some(node.full().to_string());
             }
-            // enable secret/password — глобальный пароль enable
+            // enable secret/password — это enable-mode пароль Cisco, не локальный пользователь.
+            // На VRP нет прямого аналога — требует ручной настройки AAA/admin доступа.
+            // Помещаем в platform_specific чтобы рендерер вывел manual комментарий.
             "enable" => {
-                let tokens: Vec<&str> = node.text.split_whitespace().collect();
-                if tokens.get(1) == Some(&"secret") || tokens.get(1) == Some(&"password") {
-                    let pw_type = match tokens.get(2) {
-                        Some(&"5") => PasswordType::Md5,
-                        Some(&"9") => PasswordType::Scrypt,
-                        Some(&"7") => PasswordType::Type7,
-                        _          => PasswordType::Plaintext,
-                    };
-                    let hash = tokens.get(3).unwrap_or(&"").to_string();
-                    cfg.users.push(LocalUser {
-                        name: "enable".to_string(),
-                        privilege: 15,
-                        password_type: pw_type,
-                        password_hash: hash,
-                    });
-                }
+                cfg.platform_specific.push(UnknownBlock {
+                    line: node.line_num,
+                    context: "global".to_string(),
+                    raw: node.full().to_string(),
+                });
             }
             // Финальный маркер конфига — игнорируем
             "end" => {}
