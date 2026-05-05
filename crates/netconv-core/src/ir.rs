@@ -35,9 +35,97 @@ pub struct NetworkConfig {
     pub dns: Vec<IpAddr>,
     pub snmp: Option<SnmpConfig>,
     pub aaa: Option<AaaConfig>,
+    pub stp: Option<GlobalStp>,
+    pub logging: Option<LoggingConfig>,
+    pub users: Vec<LocalUser>,
+    pub line_vty: Option<LineVty>,
+    pub ssh: Option<SshConfig>,
     pub banner: Option<String>,
     /// Всё что парсер не распознал — не выбрасываем, храним
     pub unknown_blocks: Vec<UnknownBlock>,
+    /// Платформо-специфичные команды без аналога
+    pub platform_specific: Vec<UnknownBlock>,
+}
+
+// ---------------------------------------------------------------------------
+// Global STP
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GlobalStp {
+    pub mode: StpMode,
+    pub loopguard: bool,
+    pub portfast_default: bool,
+    pub bpduguard_default: bool,
+    pub vlan_priorities: Vec<StpVlanPriority>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StpMode {
+    RapidPvst,
+    Pvst,
+    Mst,
+    Rstp,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StpVlanPriority {
+    pub vlans: Vec<u16>,
+    pub priority: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Logging
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    pub buffered_size: Option<u32>,
+    pub console_level: Option<String>,
+    pub hosts: Vec<std::net::IpAddr>,
+}
+
+// ---------------------------------------------------------------------------
+// Local users
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalUser {
+    pub name: String,
+    pub privilege: u8,
+    pub password_type: PasswordType,
+    pub password_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum PasswordType {
+    Plaintext,
+    Type7,   // Cisco Type 7 (reversible)
+    Md5,     // enable secret 5
+    Scrypt,  // enable secret 9
+}
+
+// ---------------------------------------------------------------------------
+// Line VTY
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LineVty {
+    pub exec_timeout_min: u32,
+    pub exec_timeout_sec: u32,
+    pub transport_input: Vec<String>,
+    pub logging_synchronous: bool,
+}
+
+// ---------------------------------------------------------------------------
+// SSH
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SshConfig {
+    pub version: u8,
+    pub timeout: Option<u32>,
+    pub retries: Option<u8>,
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +150,25 @@ pub struct Interface {
     pub nat_direction: Option<NatDirection>,
     pub hsrp: Vec<HsrpGroup>,
     pub ospf: Option<InterfaceOspf>,
+    pub voice_vlan: Option<u16>,
+    pub storm_control: Option<StormControl>,
+    pub stp: InterfaceStp,
     pub confidence: Confidence,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StormControl {
+    pub broadcast_level: Option<f32>,
+    pub multicast_level: Option<f32>,
+    pub unicast_level: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InterfaceStp {
+    pub portfast: bool,
+    pub bpduguard: bool,
+    pub bpdufilter: bool,
+    pub guard_root: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -601,6 +707,9 @@ impl Default for Interface {
             nat_direction: None,
             hsrp: vec![],
             ospf: None,
+            voice_vlan: None,
+            storm_control: None,
+            stp: InterfaceStp::default(),
             confidence: Confidence::Exact,
         }
     }

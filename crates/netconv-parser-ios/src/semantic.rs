@@ -39,11 +39,25 @@ impl SemanticParser {
             }
             "ntp" => self.handle_ntp(node, cfg),
             "snmp-server" => self.handle_snmp(node, cfg),
+            "spanning-tree" => self.handle_spanning_tree(node, cfg),
+            "username" => self.handle_username(node, cfg),
+            "logging" => self.handle_logging(node, cfg),
+            "line" => self.handle_line(node, cfg),
+            "aaa" => self.handle_aaa_global(node, cfg),
             "banner" => {
                 cfg.banner = Some(node.full().to_string());
             }
+            // Платформо-специфичные — явно помечаем, не смешиваем с unknown
+            "version" | "boot-start-marker" | "boot-end-marker" |
+            "no" | "service" | "crypto" | "vtp" | "clock" |
+            "system" | "errdisable" | "vstack" | "no-service" => {
+                cfg.platform_specific.push(UnknownBlock {
+                    line: node.line_num,
+                    context: "global".to_string(),
+                    raw: node.full().to_string(),
+                });
+            }
             _ => {
-                // Не падаем — сохраняем как unknown
                 cfg.unknown_blocks.push(UnknownBlock {
                     line: node.line_num,
                     context: "global".to_string(),
@@ -148,13 +162,39 @@ impl SemanticParser {
             }
             "standby" => {
                 if let Some(hsrp) = self.parse_hsrp(&tokens[1..]) {
-                    // merge с существующей группой если group_id совпадает
                     let gid = hsrp.group_id;
                     if let Some(existing) = iface.hsrp.iter_mut().find(|h| h.group_id == gid) {
                         merge_hsrp(existing, hsrp);
                     } else {
                         iface.hsrp.push(hsrp);
                     }
+                }
+            }
+            "storm-control" => {
+                // storm-control broadcast level 5.00
+                // storm-control multicast level 5.00
+                let sc = iface.storm_control.get_or_insert(StormControl::default());
+                if tokens.len() >= 4 && tokens[2] == "level" {
+                    let level: f32 = tokens[3].parse().unwrap_or(100.0);
+                    match tokens[1] {
+                        "broadcast" => sc.broadcast_level = Some(level),
+                        "multicast" => sc.multicast_level = Some(level),
+                        "unicast"   => sc.unicast_level   = Some(level),
+                        _ => {}
+                    }
+                }
+            }
+            "spanning-tree" => {
+                // spanning-tree portfast
+                // spanning-tree bpduguard enable
+                // spanning-tree bpdufilter enable
+                // spanning-tree guard root
+                match tokens.get(1) {
+                    Some(&"portfast")   => iface.stp.portfast   = true,
+                    Some(&"bpduguard")  => iface.stp.bpduguard  = tokens.get(2) != Some(&"disable"),
+                    Some(&"bpdufilter") => iface.stp.bpdufilter = tokens.get(2) != Some(&"disable"),
+                    Some(&"guard") if tokens.get(2) == Some(&"root") => iface.stp.guard_root = true,
+                    _ => {}
                 }
             }
             _ => self.unknown_iface_cmd(node, iface, report),
@@ -210,6 +250,9 @@ impl SemanticParser {
                     trunk_native: None,
                 });
                 l2.access_vlan = vlan;
+            }
+            Some(&"voice") if tokens.get(1) == Some(&"vlan") => {
+                iface.voice_vlan = tokens.get(2).and_then(|s| s.parse().ok());
             }
             Some(&"trunk") => match tokens.get(1) {
                 Some(&"allowed") if tokens.get(2) == Some(&"vlan") => {
@@ -372,14 +415,40 @@ impl SemanticParser {
                     }
                 }
             }
+            "default-gateway" => {
+                // ip default-gateway 172.20.252.242
+                // → ip route-static 0.0.0.0 0.0.0.0 <gw>
+                if let Some(gw) = tokens.get(2).and_then(|s| s.parse().ok()) {
+                    cfg.routing.static_routes.push(StaticRoute {
+                        prefix: "0.0.0.0/0".parse().unwrap(),
+                        next_hop: NextHop::Ip(gw),
+                        distance: None,
+                        tag: None,
+                        name: Some("default-gateway".to_string()),
+                        permanent: false,
+                    });
+                }
+            }
+            "ssh" => {
+                // ip ssh version 2
+                if tokens.get(2) == Some(&"version") {
+                    let ver: u8 = tokens.get(3).and_then(|s| s.parse().ok()).unwrap_or(2);
+                    cfg.ssh = Some(SshConfig { version: ver, timeout: None, retries: None });
+                }
+            }
+            "http" => {
+                // ip http server / ip http secure-server — платформо-специфично
+                cfg.platform_specific.push(UnknownBlock {
+                    line: node.line_num,
+                    context: "global".to_string(),
+                    raw: node.full().to_string(),
+                });
+            }
             "access-list" => {
-                // numbered ACL: ip access-list [standard|extended] <name>
-                // children содержат записи
                 self.handle_named_acl(node, cfg, report);
             }
             "nat" => self.handle_nat(node, cfg, report),
             "route" => {
-                // ip route <prefix> <mask> <next-hop> [distance] [name <n>] [permanent]
                 if let Some(route) = self.parse_static_route(&tokens[2..]) {
                     cfg.routing.static_routes.push(route);
                 }
@@ -1474,5 +1543,149 @@ fn port_name_to_num(s: &str) -> Option<u16> {
         "https" => Some(443), "bgp" => Some(179), "ldap" => Some(389),
         "snmp" => Some(161), "syslog" => Some(514), "rdp" => Some(3389),
         _ => s.parse().ok(),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Новые глобальные обработчики
+// ---------------------------------------------------------------------------
+
+impl SemanticParser {
+    pub fn handle_spanning_tree(&self, node: &RawNode, cfg: &mut NetworkConfig) {
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+        let stp = cfg.stp.get_or_insert(GlobalStp {
+            mode: StpMode::RapidPvst,
+            loopguard: false,
+            portfast_default: false,
+            bpduguard_default: false,
+            vlan_priorities: vec![],
+        });
+
+        match tokens.get(1) {
+            Some(&"mode") => {
+                stp.mode = match tokens.get(2) {
+                    Some(&"rapid-pvst") => StpMode::RapidPvst,
+                    Some(&"pvst")       => StpMode::Pvst,
+                    Some(&"mst")        => StpMode::Mst,
+                    _                   => StpMode::RapidPvst,
+                };
+            }
+            Some(&"loopguard") => { stp.loopguard = true; }
+            Some(&"portfast") if tokens.get(2) == Some(&"default") => {
+                stp.portfast_default = true;
+            }
+            Some(&"portfast") if tokens.get(2) == Some(&"bpduguard") => {
+                stp.bpduguard_default = true;
+            }
+            Some(&"vlan") => {
+                // spanning-tree vlan 1,10-12,14-15,18,20 priority 12288
+                if let Some(prio_pos) = tokens.iter().position(|&t| t == "priority") {
+                    if let Some(priority) = tokens.get(prio_pos + 1).and_then(|s| s.parse().ok()) {
+                        let vlans = parse_vlan_list(tokens.get(2).unwrap_or(&""));
+                        stp.vlan_priorities.push(StpVlanPriority { vlans, priority });
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub fn handle_username(&self, node: &RawNode, cfg: &mut NetworkConfig) {
+        // username root privilege 15 password 7 HASH
+        // username root privilege 15 secret 5 HASH
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+        if tokens.len() < 2 { return; }
+
+        let name = tokens[1].to_string();
+        let privilege: u8 = tokens.iter().position(|&t| t == "privilege")
+            .and_then(|i| tokens.get(i + 1))
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1);
+
+        let (pw_type, pw_hash) = if let Some(pos) = tokens.iter().position(|&t| t == "secret" || t == "password") {
+            let type_indicator = tokens.get(pos + 1).copied().unwrap_or("0");
+            let hash = tokens.get(pos + 2).copied().unwrap_or("").to_string();
+            let pw_type = match (tokens[pos], type_indicator) {
+                ("secret", "5") => PasswordType::Md5,
+                ("secret", "9") => PasswordType::Scrypt,
+                ("password", "7") => PasswordType::Type7,
+                _ => PasswordType::Plaintext,
+            };
+            (pw_type, hash)
+        } else {
+            (PasswordType::Plaintext, String::new())
+        };
+
+        cfg.users.push(LocalUser { name, privilege, password_type: pw_type, password_hash: pw_hash });
+    }
+
+    pub fn handle_logging(&self, node: &RawNode, cfg: &mut NetworkConfig) {
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+        let logging = cfg.logging.get_or_insert(LoggingConfig {
+            buffered_size: None,
+            console_level: None,
+            hosts: vec![],
+        });
+
+        match tokens.get(1) {
+            Some(&"buffered") => {
+                logging.buffered_size = tokens.get(2).and_then(|s| s.parse().ok());
+            }
+            Some(&"console") => {
+                logging.console_level = tokens.get(2).map(|s| s.to_string());
+            }
+            Some(host) => {
+                if let Ok(ip) = host.parse() {
+                    logging.hosts.push(ip);
+                }
+            }
+            None => {}
+        }
+    }
+
+    pub fn handle_line(&self, node: &RawNode, cfg: &mut NetworkConfig) {
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+        // line vty 0 4 / line vty 5 15
+        if tokens.get(1) != Some(&"vty") { return; }
+
+        let vty = cfg.line_vty.get_or_insert(LineVty {
+            exec_timeout_min: 10,
+            exec_timeout_sec: 0,
+            transport_input: vec![],
+            logging_synchronous: false,
+        });
+
+        for child in &node.children {
+            let ct: Vec<&str> = child.text.split_whitespace().collect();
+            match ct.first() {
+                Some(&"exec-timeout") => {
+                    vty.exec_timeout_min = ct.get(1).and_then(|s| s.parse().ok()).unwrap_or(10);
+                    vty.exec_timeout_sec = ct.get(2).and_then(|s| s.parse().ok()).unwrap_or(0);
+                }
+                Some(&"transport") if ct.get(1) == Some(&"input") => {
+                    for proto in &ct[2..] {
+                        vty.transport_input.push(proto.to_string());
+                    }
+                }
+                Some(&"logging") if ct.get(1) == Some(&"synchronous") => {
+                    vty.logging_synchronous = true;
+                }
+                _ => {}
+            }
+        }
+    }
+
+    pub fn handle_aaa_global(&self, node: &RawNode, cfg: &mut NetworkConfig) {
+        let tokens: Vec<&str> = node.text.split_whitespace().collect();
+        // aaa new-model — просто фиксируем факт
+        if tokens.get(1) == Some(&"new-model") {
+            cfg.aaa.get_or_insert(AaaConfig {
+                new_model: true,
+                authentication: vec![],
+                authorization: vec![],
+            }).new_model = true;
+        }
+        // aaa authentication/authorization — пропускаем в platform_specific
+        // т.к. на VRP это принципиально другая подсистема
     }
 }

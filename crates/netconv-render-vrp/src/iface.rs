@@ -135,6 +135,79 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
         }
     }
 
+    // Voice VLAN
+    // Cisco: switchport voice vlan 11
+    // VRP:   voice-vlan 11 enable
+    if let Some(vv) = iface.voice_vlan {
+        out.push(format!(" voice-vlan {} enable", vv));
+        report.add_approximate(
+            "interface.voice_vlan",
+            &format!("switchport voice vlan {}", vv),
+            &format!("voice-vlan {} enable", vv),
+            "VRP: voice-vlan X enable. Также требуется глобально: voice-vlan enable",
+        );
+    }
+
+    // Storm control
+    // Cisco: storm-control broadcast level 5.00
+    // VRP:   storm-control broadcast min-rate 64 max-rate <N>
+    //        (VRP использует kbps, Cisco — процент от bandwidth)
+    if let Some(sc) = &iface.storm_control {
+        if let Some(level) = sc.broadcast_level {
+            out.push(format!(" storm-control broadcast percent {}", level));
+            report.add_approximate(
+                "interface.storm_control",
+                &format!("storm-control broadcast level {}", level),
+                &format!("storm-control broadcast percent {}", level),
+                "VRP: storm-control percent — процентный режим доступен на большинстве платформ.                  Также доступен kbps режим: storm-control broadcast kbps <N>",
+            );
+        }
+        if let Some(level) = sc.multicast_level {
+            out.push(format!(" storm-control multicast percent {}", level));
+            report.add_approximate(
+                "interface.storm_control",
+                &format!("storm-control multicast level {}", level),
+                &format!("storm-control multicast percent {}", level),
+                "VRP: storm-control multicast percent",
+            );
+        }
+    }
+
+    // STP per-interface
+    if iface.stp.portfast {
+        // Cisco: spanning-tree portfast
+        // VRP:   stp edged-port enable
+        out.push(" stp edged-port enable".to_string());
+        report.add_approximate(
+            "stp.portfast",
+            "spanning-tree portfast",
+            "stp edged-port enable",
+            "VRP: stp edged-port enable — аналог portfast.              Автоматически активирует BPDU protection если включён stp bpdu-protection глобально.",
+        );
+    }
+
+    if iface.stp.bpdufilter {
+        // Cisco: spanning-tree bpdufilter enable
+        // VRP:   stp bpdu-filter enable
+        out.push(" stp bpdu-filter enable".to_string());
+        report.add_approximate(
+            "stp.bpdufilter",
+            "spanning-tree bpdufilter enable",
+            "stp bpdu-filter enable",
+            "VRP: stp bpdu-filter enable — полное подавление BPDU. Используй осторожно.",
+        );
+    }
+
+    if iface.stp.bpduguard {
+        out.push(" stp bpdu-protection enable".to_string());
+        report.add_approximate(
+            "stp.bpduguard",
+            "spanning-tree bpduguard enable",
+            "stp bpdu-protection enable",
+            "VRP: stp bpdu-protection enable на интерфейсе",
+        );
+    }
+
     // OSPF на интерфейсе
     if let Some(ospf) = &iface.ospf {
         render_interface_ospf(ospf, out, report, &src_block);
