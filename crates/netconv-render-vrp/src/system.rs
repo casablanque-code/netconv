@@ -7,6 +7,7 @@ pub fn render_system(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Co
     render_ntp(cfg, out, report);
     render_snmp(cfg, out, report);
     render_stp(cfg, out, report);
+    render_voice_vlan_global(cfg, out, report);
     render_users(cfg, out, report);
     render_ssh(cfg, out, report);
     render_line_vty(cfg, out, report);
@@ -47,6 +48,7 @@ fn render_ntp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
 fn render_snmp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
     let snmp = match &cfg.snmp { Some(s) => s, None => return };
     out.push("snmp-agent".to_string());
+    let vrp_reserved = ["read", "write", "trap", "all"];
     for comm in &snmp.communities {
         let (vrp_access, ios_access) = match comm.access {
             SnmpAccess::Ro => ("read", "RO"),
@@ -55,7 +57,19 @@ fn render_snmp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversi
         let src = format!("snmp-server community {} {}", comm.name, ios_access);
         let dst = format!("snmp-agent community {} {}", vrp_access, comm.name);
         out.push(dst.clone());
-        report.add_exact("snmp", &src, &dst);
+        if vrp_reserved.contains(&comm.name.to_lowercase().as_str()) {
+            report.add_approximate(
+                "snmp.community",
+                &src,
+                &dst,
+                &format!(
+                    "Community name '{}' совпадает с зарезервированным словом VRP — переименуй: snmp-agent community {} <new-name>",
+                    comm.name, vrp_access
+                ),
+            );
+        } else {
+            report.add_exact("snmp", &src, &dst);
+        }
     }
     if let Some(loc) = &snmp.location {
         let dst = format!("snmp-agent sys-info location {}", loc);
@@ -84,12 +98,20 @@ fn render_stp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
         StpMode::Rstp      => ("rstp",  "rstp"),
     };
     out.push(format!("stp mode {}", vrp_mode));
-    report.add_approximate(
+    if matches!(stp.mode, StpMode::RapidPvst | StpMode::Pvst) {
+        out.push("# ⚠ HIGH RISK: RSTP — одно дерево для всех VLAN (не per-vlan как PVST+).".to_string());
+        out.push("#   Топология может измениться если разные VLAN имели разные root bridge.".to_string());
+        out.push("#   Рекомендация: stp mode mstp + instance per VLAN group.".to_string());
+    }
+    report.add_manual(
         "stp.mode",
         &format!("spanning-tree mode {}", ios_mode),
-        &format!("stp mode {}", vrp_mode),
-        "VRP: rapid-pvst → rstp. На Huawei RSTP работает per-port, не per-vlan как у Cisco PVST+. \
-         Для per-vlan STP используй MSTP.",
+        &format!(
+            "HIGH RISK: Cisco {} — per-VLAN деревья. Huawei RSTP — одно дерево. \
+             Топология может измениться. Рекомендуется MSTP.",
+            ios_mode
+        ),
+        Some("stp mode mstp → stp region-configuration → instance N vlan X"),
     );
 
     if stp.loopguard {
@@ -131,6 +153,26 @@ fn render_stp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
         );
     }
 
+    out.push(String::new());
+}
+
+fn render_voice_vlan_global(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let has_voice = cfg.interfaces.iter().any(|i| i.voice_vlan.is_some());
+    if !has_voice { return; }
+    let mut vids: Vec<u16> = cfg.interfaces.iter().filter_map(|i| i.voice_vlan).collect();
+    vids.sort(); vids.dedup();
+    out.push("#".to_string());
+    out.push("# Voice VLAN — глобальная активация (обязательно перед интерфейсными командами)".to_string());
+    out.push("voice-vlan enable".to_string());
+    for vid in &vids {
+        out.push(format!("voice-vlan {} enable", vid));
+    }
+    report.add_approximate(
+        "voice_vlan.global",
+        "# (implicit: switchport voice vlan requires global activation on VRP)",
+        "voice-vlan enable",
+        "VRP: без voice-vlan enable глобально интерфейсные команды молча игнорируются. Автодобавлено.",
+    );
     out.push(String::new());
 }
 
