@@ -12,6 +12,7 @@ pub fn render_system(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Co
     render_ssh(cfg, out, report);
     render_line_vty(cfg, out, report);
     render_logging(cfg, out, report);
+    render_aaa(cfg, out, report);
     render_platform_specific(cfg, out);
 }
 
@@ -319,6 +320,32 @@ fn render_logging(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conve
         );
     }
 
+    out.push(String::new());
+}
+
+fn render_aaa(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let aaa = match &cfg.aaa { Some(a) => a, None => return };
+    if !aaa.new_model { return; }
+
+    out.push("#".to_string());
+    out.push("# MANUAL: AAA configuration not migrated automatically.".to_string());
+    out.push("#   Source config used 'aaa new-model'.".to_string());
+    out.push("#   On VRP authentication is configured via AAA schemes.".to_string());
+    out.push("#   Minimum required for SSH local auth:".to_string());
+    out.push("#".to_string());
+    out.push("#   aaa".to_string());
+    out.push("#    authentication-scheme LOCAL_AUTH".to_string());
+    out.push("#     authentication-mode local".to_string());
+    out.push("#    domain default".to_string());
+    out.push("#     authentication-scheme LOCAL_AUTH".to_string());
+    out.push("#".to_string());
+    out.push("#   For TACACS+/RADIUS — configure server-group and reference in domain.".to_string());
+    report.add_manual(
+        "aaa",
+        "aaa new-model",
+        "AAA configuration requires manual setup on VRP.          Authentication schemes and domains differ fundamentally from Cisco AAA.",
+        Some("aaa → authentication-scheme LOCAL_AUTH → domain default → authentication-scheme LOCAL_AUTH"),
+    );
     out.push(String::new());
 }
 

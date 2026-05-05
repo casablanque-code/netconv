@@ -139,13 +139,31 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     // Cisco: switchport voice vlan 11
     // VRP:   voice-vlan 11 enable
     if let Some(vv) = iface.voice_vlan {
-        out.push(format!(" voice-vlan {} enable", vv));
-        report.add_approximate(
-            "interface.voice_vlan",
-            &format!("switchport voice vlan {}", vv),
-            &format!("voice-vlan {} enable", vv),
-            "VRP: voice-vlan X enable. Также требуется глобально: voice-vlan enable",
-        );
+        let is_trunk = iface.l2.as_ref()
+            .map(|l| l.mode == L2Mode::Trunk)
+            .unwrap_or(false);
+
+        if is_trunk {
+            // Voice VLAN на trunk порту — нестандартная конфигурация
+            out.push(format!(" # ⚠ WARN: voice-vlan {} on trunk port — verify behavior on VRP.", vv));
+            out.push(format!(" #   In Cisco 'switchport voice vlan' on trunk is non-standard."));
+            out.push(format!(" #   On VRP voice-vlan on trunk may behave differently — review manually."));
+            out.push(format!(" voice-vlan {} enable", vv));
+            report.add_approximate(
+                "interface.voice_vlan.trunk",
+                &format!("switchport voice vlan {} (on trunk)", vv),
+                &format!("voice-vlan {} enable (on trunk — verify)", vv),
+                "WARN: voice VLAN on trunk port. Non-standard config — verify behavior on VRP.",
+            );
+        } else {
+            out.push(format!(" voice-vlan {} enable", vv));
+            report.add_approximate(
+                "interface.voice_vlan",
+                &format!("switchport voice vlan {}", vv),
+                &format!("voice-vlan {} enable", vv),
+                "VRP: voice-vlan X enable. Также требуется глобально: voice-vlan enable",
+            );
+        }
     }
 
     // Storm control
@@ -198,19 +216,36 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     }
 
     if iface.stp.bpdufilter {
-        // BPDU filter полностью подавляет STP на порту — это опасно на trunk/uplink портах.
-        // На Cisco часто используется как "костыль" на edge портах.
-        // На VRP без BPDU filter порт участвует в STP нормально — это безопаснее.
-        out.push(" # ⚠ RISK: BPDU filter disables STP on this port.".to_string());
-        out.push(" #   Use only on trusted edge ports (e.g. connected to end devices, not switches).".to_string());
-        out.push(" #   Remove if unsure — STP without filter is safer.".to_string());
-        out.push(" stp bpdu-filter enable".to_string());
-        report.add_approximate(
-            "stp.bpdufilter",
-            "spanning-tree bpdufilter enable",
-            "stp bpdu-filter enable",
-            "RISK: BPDU filter полностью отключает STP на порту.              Используй только на edge портах подключённых к конечным устройствам.              На uplink/trunk портах это может вызвать петли.",
-        );
+        let is_trunk = iface.l2.as_ref()
+            .map(|l| l.mode == L2Mode::Trunk)
+            .unwrap_or(false);
+
+        if is_trunk {
+            // Context-aware: trunk порт — НЕ применяем bpdu-filter автоматически
+            // это uplink/downlink к другому свитчу, bpdu-filter здесь опасен
+            out.push(" # ⚠ RISK: bpdu-filter NOT applied — trunk port detected.".to_string());
+            out.push(" #   Applying bpdu-filter on trunk/uplink ports can cause STP loops.".to_string());
+            out.push(" #   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
+            out.push(" #   If this port connects to an end device (not a switch), uncomment:".to_string());
+            out.push(" #   stp bpdu-filter enable".to_string());
+            report.add_manual(
+                "stp.bpdufilter",
+                "spanning-tree bpdufilter enable (on trunk port)",
+                "RISK: trunk port detected — bpdu-filter NOT auto-applied.                  On uplink/trunk ports bpdu-filter can cause STP loops.",
+                Some("Review port role. Apply 'stp bpdu-filter enable' only if this is truly an edge port."),
+            );
+        } else {
+            // Access/edge порт — применяем с предупреждением
+            out.push(" # ⚠ NOTE: BPDU filter disables STP on this port.".to_string());
+            out.push(" #   Safe only if this is a trusted edge port (end device, not a switch).".to_string());
+            out.push(" stp bpdu-filter enable".to_string());
+            report.add_approximate(
+                "stp.bpdufilter",
+                "spanning-tree bpdufilter enable",
+                "stp bpdu-filter enable",
+                "Access port: bpdu-filter applied.                  Verify this port connects to an end device, not a switch.",
+            );
+        }
     }
 
     if iface.stp.bpduguard {
