@@ -154,21 +154,32 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     //        (VRP использует kbps, Cisco — процент от bandwidth)
     if let Some(sc) = &iface.storm_control {
         if let Some(level) = sc.broadcast_level {
+            // ASSUMPTION: Cisco "level X" интерпретируется как X% от bandwidth.
+            // На некоторых платформах Cisco level — это pps или kbps, не процент.
+            // Проверь оригинальную документацию платформы перед применением.
+            out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
             out.push(format!(" storm-control broadcast percent {}", level));
             report.add_approximate(
                 "interface.storm_control",
                 &format!("storm-control broadcast level {}", level),
                 &format!("storm-control broadcast percent {}", level),
-                "VRP: storm-control percent — процентный режим доступен на большинстве платформ.                  Также доступен kbps режим: storm-control broadcast kbps <N>",
+                &format!(
+                    "ASSUMPTION: Cisco level {} → VRP percent {}.                      Единицы измерения могут отличаться в зависимости от платформы Cisco.                      Также доступен kbps режим: storm-control broadcast kbps <N>",
+                    level, level
+                ),
             );
         }
         if let Some(level) = sc.multicast_level {
+            out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
             out.push(format!(" storm-control multicast percent {}", level));
             report.add_approximate(
                 "interface.storm_control",
                 &format!("storm-control multicast level {}", level),
                 &format!("storm-control multicast percent {}", level),
-                "VRP: storm-control multicast percent",
+                &format!(
+                    "ASSUMPTION: Cisco level {} → VRP percent {}. Проверь единицы измерения.",
+                    level, level
+                ),
             );
         }
     }
@@ -187,14 +198,18 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     }
 
     if iface.stp.bpdufilter {
-        // Cisco: spanning-tree bpdufilter enable
-        // VRP:   stp bpdu-filter enable
+        // BPDU filter полностью подавляет STP на порту — это опасно на trunk/uplink портах.
+        // На Cisco часто используется как "костыль" на edge портах.
+        // На VRP без BPDU filter порт участвует в STP нормально — это безопаснее.
+        out.push(" # ⚠ RISK: BPDU filter disables STP on this port.".to_string());
+        out.push(" #   Use only on trusted edge ports (e.g. connected to end devices, not switches).".to_string());
+        out.push(" #   Remove if unsure — STP without filter is safer.".to_string());
         out.push(" stp bpdu-filter enable".to_string());
         report.add_approximate(
             "stp.bpdufilter",
             "spanning-tree bpdufilter enable",
             "stp bpdu-filter enable",
-            "VRP: stp bpdu-filter enable — полное подавление BPDU. Используй осторожно.",
+            "RISK: BPDU filter полностью отключает STP на порту.              Используй только на edge портах подключённых к конечным устройствам.              На uplink/trunk портах это может вызвать петли.",
         );
     }
 

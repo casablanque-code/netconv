@@ -58,14 +58,21 @@ fn render_snmp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversi
         let dst = format!("snmp-agent community {} {}", vrp_access, comm.name);
         out.push(dst.clone());
         if vrp_reserved.contains(&comm.name.to_lowercase().as_str()) {
-            report.add_approximate(
+            // Не генерим небезопасный вариант — только MANUAL комментарий
+            out.pop(); // убираем уже добавленную dst строку
+            out.push(format!(
+                "# MANUAL: community name '{}' conflicts with VRP keyword '{}' — rename it:",
+                comm.name, comm.name
+            ));
+            out.push(format!(
+                "#   snmp-agent community {} <new-name>",
+                vrp_access
+            ));
+            report.add_manual(
                 "snmp.community",
                 &src,
-                &dst,
-                &format!(
-                    "Community name '{}' совпадает с зарезервированным словом VRP — переименуй: snmp-agent community {} <new-name>",
-                    comm.name, vrp_access
-                ),
+                &format!("community name '{}' conflicts with VRP reserved keyword", comm.name),
+                Some(&format!("snmp-agent community {} <new-name>", vrp_access)),
             );
         } else {
             report.add_exact("snmp", &src, &dst);
@@ -322,8 +329,16 @@ fn render_platform_specific(cfg: &NetworkConfig, out: &mut Vec<String>) {
     out.push("# ПЛАТФОРМО-СПЕЦИФИЧНЫЕ КОМАНДЫ (нет прямого аналога на VRP):".to_string());
     out.push("# ============================================================".to_string());
     for block in &cfg.platform_specific {
+        // ip http server — management plane
+        if block.raw.contains("ip http") {
+            out.push("#".to_string());
+            out.push("# MANUAL: Web management".to_string());
+            out.push(format!("#   Source: {}", block.raw));
+            out.push("#   VRP equivalent:".to_string());
+            out.push("#     http server enable          # enable web UI".to_string());
+            out.push("#     undo http server enable     # recommended for security".to_string());
         // enable secret — особый случай, выводим развёрнутый manual комментарий
-        if block.raw.starts_with("enable secret") || block.raw.starts_with("enable password") {
+        } else if block.raw.starts_with("enable secret") || block.raw.starts_with("enable password") {
             out.push("#".to_string());
             out.push("# MANUAL: Cisco enable secret/password cannot be migrated directly.".to_string());
             out.push("#   On VRP there is no direct equivalent of enable-mode password.".to_string());

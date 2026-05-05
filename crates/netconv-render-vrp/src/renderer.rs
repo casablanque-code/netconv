@@ -6,6 +6,7 @@ use crate::routing::render_routing;
 use crate::acl::render_acls;
 use crate::nat::render_nat;
 use crate::system::render_system;
+use crate::vlan::render_vlans;
 
 pub struct VrpRenderer;
 
@@ -30,6 +31,9 @@ impl ConfigRenderer for VrpRenderer {
 
         // Системные настройки
         render_system(config, &mut out, report);
+
+        // VLAN database — должна быть ДО интерфейсов
+        render_vlans(config, &mut out, report);
 
         // Интерфейсы
         render_interfaces(config, &mut out, report);
