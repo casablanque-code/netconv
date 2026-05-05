@@ -4,203 +4,264 @@
 [![WASM](https://img.shields.io/badge/wasm-wasm--bindgen-blue.svg)](https://rustwasm.github.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Конвертер конфигураций сетевого оборудования с репортом конвертации.
+**Vendor-agnostic network config compiler.**
 
-Переезжаешь с Cisco на Huawei из-за санкций? Или просто устал от вендор-локина?
-Вставляешь конфиг — получаешь готовый конфиг для целевой платформы плюс детальный
-репорт: что конвертировано точно, где есть нюансы, что нужно решить вручную.
+netconv reads network device configurations, builds a vendor-neutral intermediate representation, and compiles it to any target platform — with an explicit, annotated report of every decision made.
 
-**Живое демо:** https://netconv.workers.dev *(обнови после деплоя)*
+```
+netconv build router.cfg --target vrp
+```
 
----
+Like a compiler: source → IR → target. Unlike a converter: every approximation is documented, every risk is flagged, nothing is silently wrong.
 
-## Зачем это нужно
-
-Ручная миграция конфига с Cisco IOS на Huawei VRP — это:
-- другой синтаксис для тех же концепций (`ip route` → `ip route-static`, `neighbor` → `peer`)
-- разные defaults и поведение (`passive-interface` → `silent-interface`)
-- концептуальные несоответствия (`HSRP` → `VRRP` — протоколы несовместимы бинарно)
-- риск ошибок при ручном переносе сотен строк
-
-netconv автоматизирует то что можно автоматизировать, и явно помечает то что нельзя.
-Слепой конвертер без объяснений опаснее, чем его отсутствие — поэтому каждое
-несоответствие сопровождается объяснением и рекомендацией.
+**Live demo:** https://netconv.casablanque.workers.dev
 
 ---
 
-## Быстрый старт
+## Why netconv
 
-### Вариант 1 — браузер, без установки
+Migrating network configs between vendors is painful:
 
-Открой [живое демо](https://netconv.workers.dev), вставь конфиг, нажми **convert** или `Ctrl+Enter`.
+- **Manual migration** — slow, error-prone, no audit trail
+- **Ansible/Terraform** — manage desired state, can't read and explain what you already have  
+- **Vendor tools** — locked to their ecosystem, won't tell you what you'll lose migrating away
 
-Конфиг обрабатывается локально в браузере — на сервер не уходит.
+netconv occupies a different position: it reads your existing config, explains every translation decision, and makes every limitation explicit. A silent conversion that produces a wrong config is worse than no conversion at all.
 
-### Вариант 2 — локально с полным WASM парсером
+**Primary use case:** Cisco → Huawei migration driven by import substitution requirements in Russia and CIS markets. Secondary use cases: pre-migration audit, config review, engineer onboarding.
+
+---
+
+## Core principle: failure is explicit
+
+Every output element carries a confidence level:
+
+| Level | Meaning |
+|-------|---------|
+| ✓ **Exact** | Guaranteed correct — direct syntactic equivalent |
+| ⚠ **Approximate** | Functional equivalent with caveats — report explains what to verify |
+| ✗ **Manual** | No direct equivalent — commented block with recommended approach |
+| **Platform** | Vendor-specific command with no cross-platform concept |
+
+netconv never silently drops commands. Everything unrecognised is preserved as a commented block with context.
+
+---
+
+## Quickstart
+
+### Option 1 — Browser (no install)
+
+Open [live demo](https://netconv.casablanque.workers.dev), paste config, press **convert** or `Ctrl+Enter`.
+
+Config is processed locally in the browser via WASM — never sent to a server.
+
+### Option 2 — Local with full WASM parser
 
 ```bash
 git clone https://github.com/casablanque-code/netconv.git
 cd netconv
 
-# 1. Собери WASM (нужен wasm-pack)
+# Build WASM
 cargo install wasm-pack
-wasm-pack build crates/netconv-wasm --target web --out-dir ../../web/wasm
+wasm-pack build crates/netconv-wasm --target web --out-dir ../../web/wasm --release
 
-# 2. Запусти HTTP сервер
+# Serve locally
 python3 -m http.server 8080 --directory web/
 
-# 3. Открой в браузере: http://localhost:8080
-# Надпись "demo mode" должна исчезнуть — работает реальный Rust парсер
+# Open http://localhost:8080
+# "demo mode" badge disappears — full Rust parser active
 ```
 
-> **WSL (Windows):** порты прокидываются автоматически в WSL2.
-> Открывай `http://localhost:8080` в браузере Windows — работает напрямую.
-> Если не работает: `ip addr show eth0 | grep 'inet '` — используй этот IP.
+> **WSL:** ports forward automatically in WSL2. Use `http://localhost:8080` in Windows browser.
 
-### Вариант 3 — CLI
+### Option 3 — CLI
 
 ```bash
 cargo build --release -p netconv
 
-# Конвертация (вывод в stdout)
+# Convert (stdout)
 ./target/release/netconv --input router.cfg --from ios --to vrp
 
-# Записать результат в файл
+# Write to file
 ./target/release/netconv --input router.cfg --to vrp --output router_vrp.cfg
 
-# Показать предупреждения и ошибки конвертации
+# Show warnings and manual items
 ./target/release/netconv --input router.cfg --warnings
 
-# Полный репорт в JSON (для скриптов / CI)
+# Full report as JSON (for scripts / CI gates)
 ./target/release/netconv --input router.cfg --json > report.json
 ```
 
 ---
 
-## Demo mode vs полный WASM
+## CI/CD integration
 
-|                          | Demo mode        | Полный WASM         |
-|--------------------------|------------------|---------------------|
-| Установка                | не нужна         | `wasm-pack build`   |
-| Парсер                   | JS симуляция     | Rust (полный)       |
-| Покрытие команд          | ~70%             | всё реализованное   |
-| BGP, сложные ACL         | частично         | полностью           |
-| address-family, track    | нет              | да                  |
-| Конфиг уходит на сервер  | нет              | нет                 |
+Use netconv as a network config linter in your pipeline:
 
-Demo mode подходит для типовых конфигов (интерфейсы, OSPF, статика, NAT).
-Для сложных топологий с BGP, вложенными ACL, HSRP с track — используй WASM.
+```bash
+# Fail pipeline if any manual intervention required
+./netconv --input router.cfg --json | jq '.report.manual_required == 0'
+
+# Fail if coverage drops below threshold
+./netconv --input router.cfg --json | jq '.report.coverage_pct >= 95'
+```
 
 ---
 
-## Покрытие: Cisco IOS → Huawei VRP
+## Supported conversions
 
-| Фича               | Статус    | Примечание |
-|--------------------|-----------|------------|
-| hostname           | ✓ Exact   | → sysname |
-| interface ip       | ✓ Exact   | |
-| shutdown / no shut | ✓ Exact   | → undo shutdown |
-| description        | ✓ Exact   | |
-| NTP server         | ✓ Exact   | → ntp-service unicast-server |
-| SNMP community     | ✓ Exact   | → snmp-agent community |
-| static routes      | ⚠ Approx | ip route → ip route-static, AD → preference |
-| OSPF               | ⚠ Approx | network внутри area, silent-interface, log-peer-change |
-| OSPF redistribute  | ⚠ Approx | redistribute → import-route, subnets не нужен |
-| BGP neighbors      | ⚠ Approx | neighbor → peer, remote-as → as-number |
-| BGP next-hop-self  | ⚠ Approx | → next-hop-local |
-| ACL named/numbered | ⚠ Approx | acl name, rule, traffic-filter |
-| NAT overload (PAT) | ⚠ Approx | nat outbound на интерфейсе |
-| NAT static         | ⚠ Approx | обратный порядок global/inside |
-| HSRP → VRRP       | ⚠ Approx | протоколы несовместимы бинарно, MAC разные |
-| switchport         | ⚠ Approx | port link-type, port default vlan |
-| ip helper-address  | ⚠ Approx | dhcp relay + доп. команды глобально |
-| HSRP track         | ✗ Manual | нет прямого аналога → используй NQA/BFD |
-| EIGRP              | ✗ Manual | проприетарный протокол Cisco, не поддерживается на VRP |
-
-**Легенда:**
-- ✓ **Exact** — точное соответствие, гарантированно корректно
-- ⚠ **Approx** — есть аналог с нюансами, репорт объясняет что проверить
-- ✗ **Manual** — нет аналога, команда сохраняется как комментарий с объяснением
+| Source | Target | Status |
+|--------|--------|--------|
+| Cisco IOS | Huawei VRP | ✓ Implemented |
+| Cisco IOS | Eltex ESR | 🚧 In progress |
+| Cisco IOS | VyOS | 🚧 Planned |
+| Cisco ASA | Huawei VRP | 🚧 Planned |
 
 ---
 
-## Архитектура
+## Coverage: Cisco IOS → Huawei VRP
+
+### System
+| Feature | Status | Notes |
+|---------|--------|-------|
+| hostname | ✓ Exact | → sysname |
+| NTP server | ✓ Exact | → ntp-service unicast-server |
+| SNMP community | ✓ Exact | → snmp-agent community |
+| SNMP reserved name conflict | ⚠ Manual | e.g. community "write" conflicts with VRP keyword |
+| Logging buffered | ⚠ Approx | → info-center logbuffer size |
+| SSH version | ⚠ Approx | → stelnet server enable |
+| line vty exec-timeout | ⚠ Approx | → user-interface vty / idle-timeout |
+| line vty transport input | ⚠ Approx | → protocol inbound |
+| username + privilege | ✗ Manual | → local-user (password cannot be migrated) |
+| enable secret | ✗ Manual | No VRP equivalent — AAA config required |
+| aaa new-model | ✗ Manual | → authentication-scheme + domain |
+| ip http server | ✗ Manual | → http server enable / undo |
+
+### VLAN & STP
+| Feature | Status | Notes |
+|---------|--------|-------|
+| vlan batch | ⚠ Approx | Auto-collected from all interface references |
+| vlan name | ⚠ Approx | → description |
+| spanning-tree mode rapid-pvst | ✗ Manual | **HIGH RISK** → rstp (one tree vs per-VLAN). MSTP starting point auto-generated |
+| spanning-tree loopguard | ⚠ Approx | → stp loop-protection |
+| spanning-tree portfast | ⚠ Approx | → stp edged-port enable |
+| spanning-tree bpduguard | ⚠ Approx | → stp bpdu-protection |
+| spanning-tree bpdufilter (access) | ⚠ Approx | → stp bpdu-filter enable |
+| spanning-tree bpdufilter (trunk) | ✗ Manual | **RISK** — not auto-applied on trunk ports |
+| spanning-tree vlan priority | ✗ Manual | No per-VLAN priority in RSTP |
+
+### Interfaces
+| Feature | Status | Notes |
+|---------|--------|-------|
+| ip address | ✓ Exact | |
+| shutdown / no shutdown | ✓ Exact | → shutdown / undo shutdown |
+| description | ✓ Exact | |
+| switchport access vlan | ⚠ Approx | → port default vlan |
+| switchport trunk allowed | ⚠ Approx | → port trunk allow-pass vlan |
+| switchport voice vlan (access) | ⚠ Approx | → voice-vlan X enable + global voice-vlan enable |
+| switchport voice vlan (trunk) | ⚠ Warn | Non-standard — applied with warning |
+| storm-control level | ⚠ Approx | → percent (assumption flagged inline) |
+| ip helper-address | ⚠ Approx | → dhcp relay server-ip |
+| ip access-group | ⚠ Approx | → traffic-filter |
+| ip nat inside/outside | ⚠ Approx | NAT moves to interface context |
+
+### Routing
+| Feature | Status | Notes |
+|---------|--------|-------|
+| ip default-gateway | ⚠ Approx | → ip route-static 0.0.0.0/0 |
+| ip route (static) | ⚠ Approx | → ip route-static, AD → preference |
+| OSPF process | ⚠ Approx | network inside area, log-peer-change |
+| OSPF redistribute | ⚠ Approx | → import-route |
+| OSPF passive-interface | ⚠ Approx | → silent-interface |
+| BGP neighbors | ⚠ Approx | neighbor → peer, remote-as → as-number |
+| BGP peer-groups | ⚠ Approx | → peer-group NAME |
+| BGP address-family | ⚠ Approx | → ipv4-family unicast |
+| BGP route-map | ⚠ Approx | → route-policy import/export |
+| BGP next-hop-self | ⚠ Approx | → next-hop-local |
+| HSRP → VRRP | ⚠ Approx | Protocols incompatible at wire level — MAC differs |
+| HSRP track | ✗ Manual | → NQA/BFD required |
+| EIGRP | ✗ Manual | Cisco proprietary — not supported on VRP |
+
+### ACL & NAT
+| Feature | Status | Notes |
+|---------|--------|-------|
+| ip access-list named/numbered | ⚠ Approx | acl name, rule, numbering remapped |
+| NAT overload (PAT) | ⚠ Approx | → nat outbound on interface |
+| NAT static | ⚠ Approx | Reversed global/inside order |
+
+---
+
+## Architecture
 
 ```
 crates/
-  netconv-core/        # IR типы, трейты ConfigParser/ConfigRenderer, ConversionReport
-  netconv-parser-ios/  # Cisco IOS парсер: pass1 структурное дерево, pass2 семантика
-  netconv-render-vrp/  # Huawei VRP рендерер с объяснениями
-  netconv-wasm/        # WASM биндинги (wasm-bindgen)
+  netconv-core/        # Vendor-neutral IR, ConfigParser/ConfigRenderer traits, ConversionReport
+  netconv-parser-ios/  # Cisco IOS parser: pass1 structural tree, pass2 semantic analysis
+  netconv-render-vrp/  # Huawei VRP renderer with per-item explanations
+  netconv-wasm/        # WASM bindings (wasm-bindgen)
 cli/                   # CLI binary (clap)
 web/
-  index.html           # UI: WASM если собран, demo fallback
+  index.html           # Single-file UI: WASM auto-load, demo fallback
   worker.js            # Cloudflare Worker
-wrangler.toml          # конфиг деплоя
 ```
 
-**Добавить новый вендор** = создать крейт + реализовать трейт `ConfigRenderer`.
-Парсер и IR не трогаются.
+### Adding a new target vendor
+
+One new crate, implement one trait. Parser and IR are untouched.
 
 ```rust
-// Пример: добавить Eltex ESR как цель
 impl ConfigRenderer for EltexRenderer {
     fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, _> {
-        // ...
+        // render IR to Eltex ESR syntax
     }
     fn vendor_name(&self) -> &str { "Eltex ESR" }
 }
 ```
 
----
-
-## Деплой на Cloudflare Workers
-
-```bash
-npm install -g wrangler
-wrangler login
-wrangler deploy
-# → https://netconv.YOUR-SUBDOMAIN.workers.dev
+Register in `netconv-wasm/src/lib.rs`:
+```rust
+("ios", "eltex") => convert(&IosParser, &EltexRenderer, input),
 ```
 
-Конвертация происходит в браузере пользователя (WASM или demo JS).
-Workers отдаёт только статику — конфиги на сервер не передаются.
+Add to UI select — done.
 
 ---
 
-## Разработка
+## Embedded expertise
+
+netconv encodes cross-vendor knowledge that engineers learn the hard way:
+
+- **HSRP → VRRP**: protocols are wire-incompatible. MAC address changes from `0000.0c07.acXX` to `0000.5e00.01XX`. All nodes must be migrated simultaneously.
+- **rapid-pvst → rstp**: Cisco runs a separate STP tree per VLAN. Huawei RSTP runs one tree for all VLANs. Topology can change silently if different VLANs had different root bridges.
+- **BPDU filter on trunk**: context-aware — not applied automatically on trunk ports where it can cause loops.
+- **SNMP community name conflicts**: VRP reserves `read`, `write`, `trap` as keywords — using them as community names produces ambiguous syntax.
+- **storm-control level**: Cisco `level` units vary by platform (%, pps, kbps). Every generated command is flagged with an explicit assumption.
+
+---
+
+## Requirements
+
+| Component | Version | When needed |
+|-----------|---------|-------------|
+| Rust | 1.75+ | always |
+| wasm-pack | 0.13+ | WASM build only |
+| Python 3 | any | local HTTP server only |
+| Node.js | 18+ | Cloudflare Workers deploy only |
+
+Install Rust: https://rustup.rs  
+Install wasm-pack: `cargo install wasm-pack`
+
+---
+
+## Tests
 
 ```bash
-# Проверка компиляции
-cargo check
-
-# Тесты
-cargo test
-cargo test -p netconv-parser-ios  # 7 тестов парсера
-
-# Сборка WASM
-wasm-pack build crates/netconv-wasm --target web --out-dir ../../web/wasm
-
-# Локальный сервер
-python3 -m http.server 8080 --directory web/
+cargo test                        # all tests
+cargo test -p netconv-parser-ios  # parser only (12 tests)
 ```
 
 ---
 
-## Требования
-
-| Компонент | Версия | Зачем |
-|-----------|--------|-------|
-| Rust      | 1.75+  | всегда |
-| wasm-pack | 0.13+  | только для WASM сборки |
-| Python 3  | любая  | только для локального HTTP сервера |
-| Node.js   | 18+    | только для Cloudflare Workers деплоя |
-
-Установить Rust: https://rustup.rs
-Установить wasm-pack: `cargo install wasm-pack`
-
----
-
-## Лицензия
+## License
 
 MIT
