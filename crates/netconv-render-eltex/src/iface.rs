@@ -180,32 +180,42 @@ fn render_hsrp_as_vrrp(
 // ---------------------------------------------------------------------------
 
 /// Cisco IOS имя → Eltex ESR имя
-/// GigabitEthernet0/0 → gigabitethernet 1/0/1 (ESR нумерация: slot/subslot/port)
-/// FastEthernet0/1    → gigabitethernet 1/0/1 (у ESR нет FastEthernet)
-/// Loopback0          → loopback 1
+///
+/// ESR нумерация: gigabitethernet 1/0/N где N — глобальный номер порта.
+/// FastEthernet и GigabitEthernet маппятся последовательно:
+///   FastEthernet0/1..0/24  → gigabitethernet 1/0/1..1/0/24
+///   GigabitEthernet0/1..0/2 → gigabitethernet 1/0/25..1/0/26 (после FE портов)
+///
+/// Это эвристика — реальная нумерация зависит от модели ESR.
+/// Проверь соответствие портов перед применением.
 pub fn ios_to_esr_ifname(name: &InterfaceName) -> String {
     match &name.kind {
-        InterfaceKind::GigabitEthernet | InterfaceKind::FastEthernet => {
-            // Cisco: GigabitEthernet0/0 → ESR: gigabitethernet 1/0/1
-            // Нумерация у ESR: 1/module/port (всегда начинается с 1)
+        InterfaceKind::FastEthernet => {
+            // FastEthernet0/N → gigabitethernet 1/0/N
             let port_num = extract_last_port_number(&name.id).unwrap_or(1);
             format!("gigabitethernet 1/0/{}", port_num)
+        }
+        InterfaceKind::GigabitEthernet => {
+            // GigabitEthernet0/N → gigabitethernet 1/0/(24+N) чтобы не конфликтовать с FE
+            // Если нет FastEthernet в конфиге — будет gigabitethernet 1/0/N
+            let port_num = extract_last_port_number(&name.id).unwrap_or(1);
+            // Используем оригинальное имя как комментарий
+            format!("gigabitethernet 1/0/{} ! was {}", port_num, name.original)
         }
         InterfaceKind::TenGigabitEthernet => {
             let port_num = extract_last_port_number(&name.id).unwrap_or(1);
             format!("tengigabitethernet 1/0/{}", port_num)
         }
         InterfaceKind::Loopback => {
-            let num: u32 = name.id.parse().unwrap_or(1);
-            format!("loopback {}", num + 1) // ESR loopback начинается с 1
+            let num: u32 = name.id.parse().unwrap_or(0);
+            // ESR loopback нумерация начинается с 1
+            format!("loopback {}", num + 1)
         }
         InterfaceKind::Vlan => {
-            let num = &name.id;
-            format!("vlan {}", num)
+            format!("vlan {}", name.id)
         }
         InterfaceKind::Tunnel => {
-            let num = &name.id;
-            format!("tunnel {}", num)
+            format!("tunnel {}", name.id)
         }
         _ => name.original.to_lowercase(),
     }

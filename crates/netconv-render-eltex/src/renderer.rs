@@ -29,6 +29,11 @@ impl ConfigRenderer for EltexRenderer {
         out.push("! Review zone assignments before applying — traffic will be blocked".to_string());
         out.push("! without correct firewall rules between zones.".to_string());
         out.push("!".to_string());
+        out.push("! NOTE: Eltex ESR is a router/firewall, not a managed switch.".to_string());
+        out.push("! L2 features (switchport, VLAN trunk, storm-control, STP, voice VLAN)".to_string());
+        out.push("! are not supported — this config contains L2-only interfaces.".to_string());
+        out.push("! For L2 migration consider Eltex MES series (managed switches) instead.".to_string());
+        out.push("!".to_string());
         out.push(String::new());
 
         // System: hostname, NTP, SNMP, users, SSH
