@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
-use netconv_core::traits::convert;
 use netconv_parser_ios::IosParser;
 use netconv_render_vrp::VrpRenderer;
+use netconv_render_eltex::EltexRenderer;
 use serde::{Deserialize, Serialize};
 
 #[wasm_bindgen(start)]
@@ -57,53 +57,66 @@ pub fn convert_config(
 }
 
 fn run_conversion(input: &str, source: &str, target: &str) -> WasmConvertResult {
-    // Сейчас поддерживаем одну пару — расширять по мере добавления крейтов
     match (source, target) {
         ("ios", "vrp") | ("cisco", "huawei") => {
-            let parser   = IosParser;
-            let renderer = VrpRenderer;
-
-            match convert(&parser, &renderer, input) {
-                Ok(output) => {
-                    let r = &output.report;
-                    WasmConvertResult {
-                        success: true,
-                        config_text: output.config_text,
-                        report: WasmReport {
-                            source_vendor: r.source_vendor.clone(),
-                            target_vendor: r.target_vendor.clone(),
-                            total:            r.summary.total_commands,
-                            exact:            r.summary.exact,
-                            approximate:      r.summary.approximate,
-                            manual_required:  r.summary.manual_required,
-                            unknown:          r.summary.unknown,
-                            exact_pct:        r.summary.exact_pct(),
-                            coverage_pct:     r.summary.coverage_pct(),
-                            items: r.items.iter().map(|item| WasmReportItem {
-                                severity:       format!("{:?}", item.severity),
-                                category:       item.category.clone(),
-                                source_snippet: item.source_snippet.clone(),
-                                target_snippet: item.target_snippet.clone(),
-                                message:        item.message.clone(),
-                                recommendation: item.recommendation.clone(),
-                            }).collect(),
-                        },
-                        error: None,
-                    }
-                }
-                Err(e) => WasmConvertResult {
-                    success: false,
-                    config_text: String::new(),
-                    report: empty_report(source, target),
-                    error: Some(e.to_string()),
-                }
-            }
+            do_convert(&IosParser, &VrpRenderer, input, source, target)
+        }
+        ("ios", "eltex") => {
+            do_convert(&IosParser, &EltexRenderer, input, source, target)
         }
         _ => WasmConvertResult {
             success: false,
             config_text: String::new(),
             report: empty_report(source, target),
-            error: Some(format!("Пара {}->{} пока не поддерживается", source, target)),
+            error: Some(format!("Pair {}->{} not yet supported", source, target)),
+        }
+    }
+}
+
+fn do_convert<P, R>(
+    parser: &P,
+    renderer: &R,
+    input: &str,
+    source: &str,
+    target: &str,
+) -> WasmConvertResult
+where
+    P: netconv_core::traits::ConfigParser,
+    R: netconv_core::traits::ConfigRenderer,
+{
+    match netconv_core::traits::convert(parser, renderer, input) {
+        Ok(output) => {
+            let r = &output.report;
+            WasmConvertResult {
+                success: true,
+                config_text: output.config_text,
+                report: WasmReport {
+                    source_vendor: r.source_vendor.clone(),
+                    target_vendor: r.target_vendor.clone(),
+                    total:           r.summary.total_commands,
+                    exact:           r.summary.exact,
+                    approximate:     r.summary.approximate,
+                    manual_required: r.summary.manual_required,
+                    unknown:         r.summary.unknown,
+                    exact_pct:       r.summary.exact_pct(),
+                    coverage_pct:    r.summary.coverage_pct(),
+                    items: r.items.iter().map(|item| WasmReportItem {
+                        severity:       format!("{:?}", item.severity),
+                        category:       item.category.clone(),
+                        source_snippet: item.source_snippet.clone(),
+                        target_snippet: item.target_snippet.clone(),
+                        message:        item.message.clone(),
+                        recommendation: item.recommendation.clone(),
+                    }).collect(),
+                },
+                error: None,
+            }
+        }
+        Err(e) => WasmConvertResult {
+            success: false,
+            config_text: String::new(),
+            report: empty_report(source, target),
+            error: Some(e.to_string()),
         }
     }
 }
