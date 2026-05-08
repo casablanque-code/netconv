@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 netconv-core = { path = "../netconv-core" }
 netconv-parser-ios = { path = "../netconv-parser-ios" }
 netconv-render-vrp = { path = "../netconv-render-vrp" }
+netconv-render-eltex = { path = "../netconv-render-eltex" }
 wasm-bindgen = "=0.2.92"
 serde-wasm-bindgen = "=0.6.5"
 serde = { version = "1", features = ["derive"] }

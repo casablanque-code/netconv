@@ -19,6 +19,11 @@ function takeObject(idx) {
     dropObject(idx);
     return ret;
 }
+/**
+*/
+export function init() {
+    wasm.init();
+}
 
 let WASM_VECTOR_LEN = 0;
 
@@ -131,12 +136,6 @@ export function convert_config(source_config, source_vendor, target_vendor) {
         wasm.__wbindgen_add_to_stack_pointer(16);
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-}
-
-/**
-*/
-export function init() {
-    wasm.init();
 }
 
 function addHeapObject(obj) {

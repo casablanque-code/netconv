@@ -3,6 +3,7 @@ members = [
     "crates/netconv-core",
     "crates/netconv-parser-ios",
     "crates/netconv-render-vrp",
+    "crates/netconv-render-eltex",
     "crates/netconv-wasm",
     "cli",
 ]

@@ -1,6 +1,9 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
+*/
+export function init(): void;
+/**
 * Основная функция — вызывается из JS
 * convert_config(source_config: string, source_vendor: string, target_vendor: string) → JSON string
 * @param {string} source_config
@@ -9,9 +12,6 @@
 * @returns {string}
 */
 export function convert_config(source_config: string, source_vendor: string, target_vendor: string): string;
-/**
-*/
-export function init(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 

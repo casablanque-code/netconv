@@ -1,0 +1,8 @@
+[package]
+name = "netconv-render-eltex"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+netconv-core = { path = "../netconv-core" }
+ipnet = "2"
