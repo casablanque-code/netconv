@@ -30,6 +30,8 @@ pub struct WasmReport {
     pub exact_pct: f32,
     pub coverage_pct: f32,
     pub items: Vec<WasmReportItem>,
+    pub risk_level: String,
+    pub risk_reasons: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -108,6 +110,8 @@ where
                         message:        item.message.clone(),
                         recommendation: item.recommendation.clone(),
                     }).collect(),
+                    risk_level:   r.risk.level.label().to_string(),
+                    risk_reasons: r.risk.reasons.clone(),
                 },
                 error: None,
             }
@@ -128,5 +132,7 @@ fn empty_report(src: &str, tgt: &str) -> WasmReport {
         total: 0, exact: 0, approximate: 0, manual_required: 0, unknown: 0,
         exact_pct: 0.0, coverage_pct: 0.0,
         items: vec![],
+        risk_level: "LOW".to_string(),
+        risk_reasons: vec![],
     }
 }

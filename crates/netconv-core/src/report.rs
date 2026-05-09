@@ -1,6 +1,67 @@
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
+// Risk Score — итоговая оценка рискованности конвертации
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RiskLevel {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+impl RiskLevel {
+    pub fn label(&self) -> &str {
+        match self {
+            RiskLevel::Low      => "LOW",
+            RiskLevel::Medium   => "MEDIUM",
+            RiskLevel::High     => "HIGH",
+            RiskLevel::Critical => "CRITICAL",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RiskScore {
+    pub level: RiskLevel,
+    pub reasons: Vec<String>,
+    pub recommendations: Vec<String>,
+}
+
+impl Default for RiskScore {
+    fn default() -> Self {
+        RiskScore {
+            level: RiskLevel::Low,
+            reasons: vec![],
+            recommendations: vec![],
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Confidence level для zone classification и других эвристик
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ConfidenceLevel {
+    High,    // явный признак (NAT outside, ключевое слово)
+    Medium,  // косвенный признак (default route)
+    Low,     // fallback (всё остальное)
+}
+
+impl ConfidenceLevel {
+    pub fn label(&self) -> &str {
+        match self {
+            ConfidenceLevel::High   => "HIGH",
+            ConfidenceLevel::Medium => "MEDIUM",
+            ConfidenceLevel::Low    => "LOW",
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ConversionReport — главная ценность инструмента
 // ---------------------------------------------------------------------------
 
@@ -10,6 +71,7 @@ pub struct ConversionReport {
     pub target_vendor: String,
     pub summary: ReportSummary,
     pub items: Vec<ReportItem>,
+    pub risk: RiskScore,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

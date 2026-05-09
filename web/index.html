@@ -1,1108 +1,524 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>netconv — network config converter</title>
+<title>infra/platform — Self-hosted infrastructure. Zero Trust. No bottlenecks.</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg:         #0e0f11;
-  --bg2:        #141618;
-  --bg3:        #1a1d21;
-  --bg4:        #212429;
-  --border:     #2a2e35;
-  --border2:    #363b44;
-  --text:       #d4d8e0;
-  --text2:      #8a909a;
-  --text3:      #555c68;
-  --accent:     #4a9eff;
-  --accent2:    #1a5cbf;
-  --ok:         #3dba78;
-  --ok-bg:      #0d2e1c;
-  --warn:       #e8a030;
-  --warn-bg:    #2e1f08;
-  --err:        #e85050;
-  --err-bg:     #2e0e0e;
-  --info:       #6a7585;
-  --info-bg:    #181c22;
-  --mono: 'IBM Plex Mono', monospace;
-  --sans: 'IBM Plex Sans', sans-serif;
-  --radius: 6px;
+  --bg:          #080808;
+  --surface:     #0f0f0f;
+  --surface2:    #141414;
+  --border:      #1c1c1c;
+  --border2:     #242424;
+  --accent:      #c8f135;
+  --accent-dim:  rgba(200,241,53,0.08);
+  --text:        #ebebeb;
+  --text-mid:    #888;
+  --text-dim:    #444;
+  --mono:        'DM Mono', monospace;
+  --display:     'Syne', sans-serif;
+  --max:         1160px;
+  --pad:         48px;
 }
 
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--sans);
-  font-size: 14px;
-  line-height: 1.5;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+html { background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 14px; line-height: 1.6; }
+body { overflow-x: hidden; }
+a { color: inherit; text-decoration: none; }
+
+.grid-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 52px 52px;
+  opacity: 0.35;
 }
 
-/* ── header ── */
-header {
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--pad);
+  background: rgba(8,8,8,0.9);
+  backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
-  padding: 0 24px;
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
 }
+.logo { font-family: var(--mono); font-size: 13px; letter-spacing: 0.05em; }
+.logo em { color: var(--accent); font-style: normal; }
+.nav-links { display: flex; align-items: center; gap: 36px; }
+.nav-links a { font-size: 12px; letter-spacing: 0.05em; color: var(--text-mid); transition: color 0.15s; }
+.nav-links a:hover { color: var(--text); }
+.nav-gh {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; letter-spacing: 0.05em;
+  color: var(--bg); background: var(--accent);
+  padding: 7px 18px; transition: opacity 0.15s;
+}
+.nav-gh:hover { opacity: 0.85; }
 
-.logo {
-  font-family: var(--mono);
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.logo-bracket { color: var(--accent); }
-.logo-sub {
-  font-size: 11px;
-  color: var(--text3);
-  font-weight: 400;
-  margin-left: 4px;
-}
-
-.vendor-selects {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.vendor-selects select {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-}
-.vendor-selects select:hover { border-color: var(--border2); }
-.vendor-selects select:focus { border-color: var(--accent2); }
-
-.arrow-label {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text3);
-  padding: 0 2px;
-}
-
-/* ── convert button ── */
-.btn-convert {
-  background: var(--accent2);
-  border: 1px solid var(--accent);
-  color: #fff;
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 18px;
-  border-radius: var(--radius);
-  cursor: pointer;
-  letter-spacing: 0.03em;
-  transition: background 0.12s, opacity 0.12s;
-  white-space: nowrap;
-}
-.btn-convert:hover { background: var(--accent); }
-.btn-convert:active { opacity: 0.85; }
-.btn-convert:disabled { opacity: 0.35; cursor: not-allowed; }
-
-/* ── main layout ── */
-.workspace {
+.hero {
+  position: relative; z-index: 1;
+  padding: 160px var(--pad) 100px;
+  max-width: var(--max); margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr auto;
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
+  grid-template-columns: 1fr 420px;
+  gap: 80px; align-items: center;
 }
 
-/* ── editor panes ── */
-.pane {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border);
-  min-height: 0;
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 11px; letter-spacing: 0.12em; color: var(--accent);
+  margin-bottom: 28px;
 }
-.pane:last-child { border-right: none; }
+.eyebrow-line { width: 28px; height: 1px; background: var(--accent); }
 
-.pane-header {
-  padding: 8px 16px;
+h1 {
+  font-family: var(--display);
+  font-size: 72px; font-weight: 800;
+  line-height: 0.95; letter-spacing: -0.02em;
+  margin-bottom: 32px;
+}
+h1 .a { color: var(--accent); }
+h1 .d { color: var(--text-dim); }
+
+.hero-desc {
+  font-size: 14px; color: var(--text-mid); line-height: 1.75;
+  max-width: 460px; margin-bottom: 44px;
+}
+
+.hero-actions { display: flex; align-items: center; gap: 24px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+  padding: 12px 24px; transition: opacity 0.15s;
+}
+.btn-solid { background: var(--accent); color: var(--bg); }
+.btn-solid:hover { opacity: 0.85; }
+.btn-line { color: var(--text-mid); border: 1px solid var(--border2); }
+.btn-line:hover { border-color: var(--text-dim); color: var(--text); }
+
+.terminal { background: var(--surface); border: 1px solid var(--border2); overflow: hidden; }
+.t-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; background: var(--surface2);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.dr { background: #ff5f57; } .dy { background: #febc2e; } .dg { background: #28c840; }
+.t-title { margin-left: auto; font-size: 10px; letter-spacing: 0.07em; color: var(--text-dim); }
+.t-body { padding: 20px 20px 24px; font-size: 12px; line-height: 2; }
+.t-comment { color: var(--text-dim); display: block; }
+.t-blank   { display: block; height: 6px; }
+.t-prompt  { color: var(--accent); }
+.t-out     { color: var(--text-mid); display: block; padding-left: 14px; }
+.t-ok      { color: var(--accent); display: block; }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.cursor {
+  display: inline-block; width: 7px; height: 13px;
+  background: var(--accent); vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
 }
 
-.pane-title {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.divider {
+  position: relative; z-index: 1; height: 1px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--border) 40%, transparent 100%);
 }
 
-.pane-action {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text3);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
+.stats {
+  position: relative; z-index: 1;
+  border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: repeat(4, 1fr);
 }
-.pane-action:hover { color: var(--text2); border-color: var(--border2); }
+.stat { padding: 44px var(--pad); border-right: 1px solid var(--border); }
+.stat:last-child { border-right: none; }
+.stat-n { font-family: var(--display); font-size: 52px; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 8px; }
+.stat-l { font-size: 11px; letter-spacing: 0.08em; color: var(--text-dim); text-transform: uppercase; }
 
-textarea {
-  flex: 1;
-  background: var(--bg);
-  border: none;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12.5px;
-  line-height: 1.65;
-  padding: 16px;
-  resize: none;
-  outline: none;
-  min-height: 0;
-  tab-size: 2;
-}
-textarea::placeholder { color: var(--text3); }
-textarea:focus { background: var(--bg); }
-
-#output-area {
-  color: #b8e0c8;
-  background: var(--bg);
+section {
+  position: relative; z-index: 1;
+  padding: 96px var(--pad);
+  max-width: var(--max); margin: 0 auto;
 }
 
-/* ── report panel ── */
-.report-panel {
-  grid-column: 1 / -1;
+.s-label {
+  display: flex; align-items: center; gap: 16px;
+  font-size: 11px; letter-spacing: 0.12em;
+  color: var(--text-dim); text-transform: uppercase;
+  margin-bottom: 48px;
+}
+.s-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.flow { display: grid; grid-template-columns: repeat(6, 1fr); border: 1px solid var(--border); }
+.flow-4 { grid-template-columns: repeat(4, 1fr); }
+.flow-step { padding: 32px 24px 28px; border-right: 1px solid var(--border); }
+.flow-step:last-child { border-right: none; }
+.f-num  { font-size: 10px; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 20px; text-transform: uppercase; }
+.f-icon { font-size: 18px; margin-bottom: 14px; display: block; }
+.f-name { font-family: var(--display); font-size: 14px; font-weight: 700; margin-bottom: 10px; line-height: 1.2; }
+.f-desc { font-size: 11px; color: var(--text-dim); line-height: 1.65; }
+.f-time { margin-top: 16px; font-size: 10px; color: var(--accent); letter-spacing: 0.06em; }
+
+.features { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border); }
+.feat {
+  padding: 40px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  transition: background 0.2s;
+}
+.feat:hover { background: var(--surface); }
+.feat:nth-child(3n)  { border-right: none; }
+.feat:nth-child(n+4) { border-bottom: none; }
+.feat-tag {
+  display: inline-block; font-size: 10px; letter-spacing: 0.1em; color: var(--accent);
+  border: 1px solid rgba(200,241,53,0.25); padding: 3px 9px; margin-bottom: 20px;
+}
+.feat-title { font-family: var(--display); font-size: 17px; font-weight: 700; margin-bottom: 12px; line-height: 1.25; }
+.feat-body  { font-size: 12px; color: var(--text-dim); line-height: 1.75; }
+
+.why-not { border: 1px solid var(--border); background: var(--surface); padding: 36px 40px; margin-bottom: 36px; }
+.why-not-label { font-size: 11px; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 28px; }
+.why-not-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 36px; }
+.why-item-title { color: var(--accent); font-size: 12px; margin-bottom: 10px; }
+.why-item-body  { font-size: 11px; color: var(--text-dim); line-height: 1.7; }
+
+.vs { width: 100%; border-collapse: collapse; border: 1px solid var(--border); }
+.vs th, .vs td { padding: 14px 24px; text-align: left; border-bottom: 1px solid var(--border); font-size: 12px; }
+.vs th { font-size: 11px; letter-spacing: 0.07em; color: var(--text-dim); background: var(--surface); }
+.vs th.us { color: var(--accent); background: var(--accent-dim); }
+.vs td { color: var(--text-mid); }
+.vs td.us { color: var(--text); background: rgba(200,241,53,0.03); }
+.vs tr:last-child td, .vs tr:last-child th { border-bottom: none; }
+.ck { color: var(--accent); } .xx { color: var(--text-dim); }
+
+.cta {
+  position: relative; z-index: 1;
   border-top: 1px solid var(--border);
-  max-height: 280px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  padding: 100px var(--pad); text-align: center;
 }
+.cta h2 { font-family: var(--display); font-size: 56px; font-weight: 800; line-height: 1; margin-bottom: 20px; }
+.cta h2 em { color: var(--accent); font-style: normal; }
+.cta-sub { font-size: 13px; color: var(--text-dim); margin-bottom: 44px; }
+.cta-cmd {
+  display: inline-block; background: var(--surface); border: 1px solid var(--border2);
+  padding: 14px 32px; font-size: 13px; color: var(--text-mid);
+  margin-bottom: 36px; letter-spacing: 0.03em; user-select: all;
+}
+.cta-cmd em { color: var(--accent); font-style: normal; }
 
-.report-header {
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-shrink: 0;
-  overflow-x: auto;
+footer {
+  position: relative; z-index: 1;
+  border-top: 1px solid var(--border);
+  padding: 24px var(--pad);
+  display: flex; align-items: center; justify-content: space-between;
 }
+.f-copy { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; }
+.f-links { display: flex; gap: 28px; }
+.f-links a { font-size: 11px; color: var(--text-dim); letter-spacing: 0.05em; transition: color 0.15s; }
+.f-links a:hover { color: var(--accent); }
 
-.report-title {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.stat-pill {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--mono);
-  font-size: 11px;
-  white-space: nowrap;
-}
-.stat-pill .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.stat-pill .val { font-weight: 500; }
-.pill-ok   { color: var(--ok); }
-.pill-warn { color: var(--warn); }
-.pill-err  { color: var(--err); }
-.pill-info { color: var(--info); }
-.pill-ok   .dot { background: var(--ok); }
-.pill-warn .dot { background: var(--warn); }
-.pill-err  .dot { background: var(--err); }
-.pill-info .dot { background: var(--info); }
-
-.coverage-bar-wrap {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.coverage-label {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text2);
-}
-.coverage-bar {
-  width: 80px;
-  height: 4px;
-  background: var(--bg4);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.coverage-fill {
-  height: 100%;
-  background: var(--ok);
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-
-.report-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
-}
-
-.report-item {
-  padding: 9px 16px;
-  border-bottom: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: 80px 140px 1fr 1fr;
-  gap: 12px;
-  align-items: start;
-  font-size: 12px;
-}
-.report-item:hover { background: var(--bg2); }
-.report-item:last-child { border-bottom: none; }
-
-.ri-sev {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-weight: 500;
-  white-space: nowrap;
-  width: fit-content;
-}
-.sev-ok   { background: var(--ok-bg);   color: var(--ok);   border: 1px solid #1a5c3a; }
-.sev-warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #5c3810; }
-.sev-err  { background: var(--err-bg);  color: var(--err);  border: 1px solid #5c1c1c; }
-.sev-info { background: var(--info-bg); color: var(--info); border: 1px solid #2a3040; }
-
-.ri-cat {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ri-msg {
-  color: var(--text2);
-  line-height: 1.4;
-}
-.ri-msg em {
-  color: var(--text);
-  font-style: normal;
-  font-family: var(--mono);
-  font-size: 11px;
-}
-
-.ri-snip {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text3);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.snip-row { display: flex; gap: 6px; align-items: baseline; }
-.snip-label { color: var(--text3); font-size: 10px; min-width: 32px; }
-.snip-from { color: var(--err); }
-.snip-to   { color: var(--ok); }
-
-/* ── empty / loading states ── */
-.empty-state {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-direction: column;
-  gap: 8px;
-  color: var(--text3);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.empty-state .big { font-size: 22px; color: var(--border2); }
-
-.loading {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text3);
-  padding: 20px;
-}
-.loading.active { display: flex; }
-
-.spinner {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--border2);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ── filter tabs ── */
-.report-filters {
-  display: flex;
-  gap: 2px;
-  margin-left: 12px;
-}
-.filter-btn {
-  background: none;
-  border: 1px solid transparent;
-  color: var(--text3);
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.1s;
-}
-.filter-btn:hover { color: var(--text2); }
-.filter-btn.active {
-  border-color: var(--border2);
-  color: var(--text);
-  background: var(--bg3);
-}
-
-/* ── scrollbars ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border2); }
-
-/* ── WASM not loaded notice ── */
-.wasm-notice {
-  background: var(--warn-bg);
-  border: 1px solid #5c3810;
-  border-radius: var(--radius);
-  padding: 6px 12px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--warn);
-  display: none;
-}
-.wasm-notice.show { display: block; }
-
-/* ── copy toast ── */
-.toast {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: var(--bg3);
-  border: 1px solid var(--border2);
-  color: var(--ok);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 8px 14px;
-  border-radius: var(--radius);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s;
-  z-index: 100;
-}
-.toast.show { opacity: 1; }
-
-/* ── demo mode badge ── */
-.demo-badge {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 2px 7px;
-  border-radius: 3px;
-  background: var(--warn-bg);
-  color: var(--warn);
-  border: 1px solid #5c3810;
-}
-
-/* ── resize handle ── */
-@media (max-width: 900px) {
-  .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr auto; }
-  .pane { border-right: none; border-bottom: 1px solid var(--border); }
-  .report-item { grid-template-columns: 70px 1fr; }
-  .ri-snip { display: none; }
-}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+.hero-left > * { animation: fadeUp 0.5s ease both; }
+.eyebrow      { animation-delay: 0s; }
+h1            { animation-delay: 0.08s; }
+.hero-desc    { animation-delay: 0.16s; }
+.hero-actions { animation-delay: 0.22s; }
+.terminal     { animation: fadeUp 0.5s 0.28s ease both; }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="logo">
-    <span class="logo-bracket">[</span>netconv<span class="logo-bracket">]</span>
-    <span class="logo-sub">network config converter</span>
-  </div>
-  <div style="display:flex;align-items:center;gap:12px;">
-    <span id="wasm-notice" class="wasm-notice">WASM не загружен — demo mode</span>
-    <div class="vendor-selects">
-      <select id="src-vendor">
-        <option value="ios">Cisco IOS</option>
-        <option value="asa">Cisco ASA</option>
-        <option value="vrp">Huawei VRP</option>
-      </select>
-      <span class="arrow-label">→</span>
-      <select id="dst-vendor">
-        <option value="vrp">Huawei VRP</option>
-        <option value="eltex">Eltex ESR</option>
-        <option value="vyos">VyOS</option>
-      </select>
-    </div>
-    <button class="btn-convert" id="btn-convert" onclick="runConvert()">convert</button>
-  </div>
-</header>
+<div class="grid-bg"></div>
 
-<div class="workspace">
-  <!-- input pane -->
-  <div class="pane">
-    <div class="pane-header">
-      <span class="pane-title">source config</span>
-      <div style="display:flex;gap:6px;">
-        <button class="pane-action" onclick="loadExample()">load example</button>
-        <button class="pane-action" onclick="clearInput()">clear</button>
-      </div>
+<nav>
+  <div class="logo">infra<em>/</em>platform</div>
+  <div class="nav-links">
+    <a href="#scenario">Use case</a>
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#vs">vs alternatives</a>
+  </div>
+  <a href="https://github.com/casablanque-code/platform-infra" class="nav-gh">GitHub →</a>
+</nav>
+
+<div class="hero">
+  <div class="hero-left">
+    <div class="eyebrow"><span class="eyebrow-line"></span>SELF-HOSTED INFRASTRUCTURE PLATFORM</div>
+    <h1>
+      Infra in<br>
+      <span class="a">2 minutes.</span><br>
+      <span class="d">No tickets.</span><br>
+      No bottleneck.
+    </h1>
+    <p class="hero-desc">
+      Open-source self-hosted platform for small engineering teams
+      who need production-grade infrastructure without a dedicated platform team.
+      Zero Trust built in from day one. Governance enforced automatically.
+      Switch cloud provider without changing a single line of interface.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/casablanque-code/platform-infra" class="btn btn-solid">Get started →</a>
+      <a href="#scenario" class="btn btn-line">See use case</a>
     </div>
-    <textarea
-      id="input-area"
-      spellcheck="false"
-      autocomplete="off"
-      placeholder="! Paste your Cisco IOS config here&#10;! or click 'load example'&#10;&#10;hostname ROUTER-01&#10;!&#10;interface GigabitEthernet0/0&#10; ip address 10.0.0.1 255.255.255.0&#10; no shutdown"
-    ></textarea>
   </div>
 
-  <!-- output pane -->
-  <div class="pane">
-    <div class="pane-header">
-      <span class="pane-title">converted config</span>
-      <button class="pane-action" id="copy-btn" onclick="copyOutput()" style="display:none;">copy</button>
+  <div class="terminal">
+    <div class="t-bar">
+      <div class="dot dr"></div><div class="dot dy"></div><div class="dot dg"></div>
+      <div class="t-title">provision · aws · us-east-1</div>
     </div>
-    <div id="output-empty" class="empty-state">
-      <span class="big">⌁</span>
-      <span>конвертированный конфиг появится здесь</span>
+    <div class="t-body">
+      <span class="t-comment"># GitHub Actions UI → fill form → submit</span>
+      <span class="t-blank"></span>
+      <span class="t-ok"><span class="t-prompt">▶</span> governance check</span>
+      <span class="t-out">✓ cost estimate: $12/mo (limit: $50)</span>
+      <span class="t-out">✓ tags validated</span>
+      <span class="t-out">✓ no public DB exposure</span>
+      <span class="t-blank"></span>
+      <span class="t-ok"><span class="t-prompt">▶</span> tofu apply</span>
+      <span class="t-out">aws_instance.this[0]: Creating...</span>
+      <span class="t-out">aws_security_group.this[0]: Created</span>
+      <span class="t-out">aws_key_pair.this[0]: Created</span>
+      <span class="t-blank"></span>
+      <span class="t-ok"><span class="t-prompt">▶</span> ansible-playbook eaas.yml</span>
+      <span class="t-out">TASK [base-hardening] ✓</span>
+      <span class="t-out">TASK [docker-ce] ✓</span>
+      <span class="t-out">TASK [tollgate-register] ✓</span>
+      <span class="t-blank"></span>
+      <span class="t-ok">✓ https://backend-dev.internal — ready</span>
+      <span class="t-ok">✓ elapsed: 2m 14s <span class="cursor"></span></span>
     </div>
-    <div id="loading" class="loading">
-      <div class="spinner"></div>
-      <span>конвертация...</span>
-    </div>
-    <textarea
-      id="output-area"
-      spellcheck="false"
-      readonly
-      style="display:none;"
-    ></textarea>
-  </div>
-
-  <!-- report panel -->
-  <div class="report-panel">
-    <div class="report-header">
-      <span class="report-title">conversion report</span>
-      <div class="report-filters">
-        <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">all</button>
-        <button class="filter-btn" data-filter="Warn" onclick="setFilter('Warn',this)">warnings</button>
-        <button class="filter-btn" data-filter="Error" onclick="setFilter('Error',this)">errors</button>
-        <button class="filter-btn" data-filter="Ok" onclick="setFilter('Ok',this)">ok</button>
-        <button class="filter-btn" data-filter="Info" onclick="setFilter('Info',this)">unknown</button>
-      </div>
-      <div id="stat-pills" style="display:flex;gap:16px;align-items:center;margin-left:16px;"></div>
-      <div class="coverage-bar-wrap" id="coverage-wrap" style="display:none;">
-        <span class="coverage-label" id="coverage-label">0%</span>
-        <div class="coverage-bar"><div class="coverage-fill" id="coverage-fill" style="width:0%"></div></div>
-      </div>
-    </div>
-    <div id="report-loading" class="loading" style="padding:16px;">
-      <div class="spinner"></div><span>анализ...</span>
-    </div>
-    <div id="report-empty" style="padding:16px;font-family:var(--mono);font-size:12px;color:var(--text3);">
-      запусти конвертацию — репорт появится здесь
-    </div>
-    <div id="report-body" class="report-body" style="display:none;"></div>
   </div>
 </div>
 
-<div class="toast" id="toast">скопировано</div>
+<div class="divider"></div>
 
-<script>
-// ── state ──
-let allItems = [];
-let currentFilter = 'all';
-let wasmLoaded = false;
+<div class="stats">
+  <div class="stat"><div class="stat-n">&lt;3m</div><div class="stat-l">VM + Docker ready</div></div>
+  <div class="stat"><div class="stat-n">4</div><div class="stat-l">Cloud providers</div></div>
+  <div class="stat"><div class="stat-n">0</div><div class="stat-l">Tickets required</div></div>
+  <div class="stat"><div class="stat-n">ZT</div><div class="stat-l">Zero Trust default</div></div>
+</div>
 
-// ── convert_config: WASM если загружен, иначе demo ──
-function convert_config(input, src, dst) {
-  if (window._wasmConvertConfig) {
-    try {
-      return window._wasmConvertConfig(input, src, dst);
-    } catch(e) {
-      console.error('[netconv] WASM error, falling back to demo:', e);
-    }
-  }
-  return JSON.stringify(simulateConversion(input, src, dst));
-}
+<section id="scenario">
+  <div class="s-label">Real use case</div>
+  <div class="flow flow-4">
+    <div class="flow-step">
+      <div class="f-num">Without this platform</div>
+      <span class="f-icon">😤</span>
+      <div class="f-name">Dev needs staging DB</div>
+      <div class="f-desc">Opens a ticket. Waits 2 days. Pings DevOps in Slack. Gets a VM with port 5432 open to the world and no backups.</div>
+      <div class="f-time">~2 days</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">Step 1</div>
+      <span class="f-icon">🖥</span>
+      <div class="f-name">Opens GitHub Actions</div>
+      <div class="f-desc">Fills a form: team, cloud, environment, expiry date. No YAML. No CLI. No Terraform knowledge needed.</div>
+      <div class="f-time">0:00</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">Step 2</div>
+      <span class="f-icon">⚙️</span>
+      <div class="f-name">Platform runs</div>
+      <div class="f-desc">Governance checks pass. OpenTofu provisions. Ansible configures. Tollgate registers the endpoint with JWT auth.</div>
+      <div class="f-time">~2 min</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">Result</div>
+      <span class="f-icon">✅</span>
+      <div class="f-name">Gets a secure URL</div>
+      <div class="f-desc">postgresql://...@db.internal — ready, secured, monitored, backed up daily. Auto-destroys on expiry date.</div>
+      <div class="f-time">not 2 days. 2 minutes.</div>
+    </div>
+  </div>
+</section>
 
-// ── пример конфига ──
-const EXAMPLE_CONFIG = `hostname CORE-RTR-MSK
-ip domain-name corp.ru
-!
-interface GigabitEthernet0/0
- description ** WAN - ISP **
- ip address 203.0.113.2 255.255.255.252
- ip access-group ACL-WAN-IN in
- ip nat outside
- no shutdown
-!
-interface GigabitEthernet0/1
- description ** LAN - Office **
- ip address 10.10.0.1 255.255.255.0
- ip helper-address 10.10.0.254
- ip nat inside
- standby 1 ip 10.10.0.254
- standby 1 priority 110
- standby 1 preempt delay minimum 30
- no shutdown
-!
-interface Loopback0
- description Router-ID
- ip address 172.16.0.1 255.255.255.255
- no shutdown
-!
-router ospf 1
- router-id 172.16.0.1
- log-adjacency-changes
- network 10.10.0.0 0.0.0.255 area 0
- network 172.16.0.1 0.0.0.0 area 0
- passive-interface GigabitEthernet0/0
- default-information originate always
- redistribute static subnets
-!
-ip route 0.0.0.0 0.0.0.0 203.0.113.1 name DEFAULT-GW
-ip route 192.168.100.0 255.255.255.0 10.10.0.254 name BRANCH-VRN
-!
-ip access-list extended ACL-WAN-IN
- 10 permit tcp any host 203.0.113.2 eq 443
- 20 permit tcp any host 203.0.113.2 eq 22
- 30 permit icmp any host 203.0.113.2
- 40 deny ip any any log
-!
-ip nat inside source list ACL-NAT interface GigabitEthernet0/0 overload
-!
-ntp server 217.25.43.35 prefer
-ntp server 85.21.78.23
-!
-snmp-server community CORP-RO RO
-snmp-server location Moscow-HQ-DC1`;
+<section id="how" style="padding-top:0">
+  <div class="s-label">How it works</div>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="f-num">01</div>
+      <span class="f-icon">🖥</span>
+      <div class="f-name">Fill form</div>
+      <div class="f-desc">GitHub Actions UI. No CLI, no YAML, no git knowledge needed.</div>
+      <div class="f-time">0:00</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">02</div>
+      <span class="f-icon">🛡</span>
+      <div class="f-name">Governance</div>
+      <div class="f-desc">OPA checks cost limits, security rules, and mandatory tags before anything runs.</div>
+      <div class="f-time">0:15</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">03</div>
+      <span class="f-icon">⚙️</span>
+      <div class="f-name">Provision</div>
+      <div class="f-desc">OpenTofu creates VM, firewall, and SSH key on your chosen cloud provider.</div>
+      <div class="f-time">0:30</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">04</div>
+      <span class="f-icon">🔧</span>
+      <div class="f-name">Configure</div>
+      <div class="f-desc">Ansible hardens the VM, installs Docker, sets up monitoring agent.</div>
+      <div class="f-time">1:30</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">05</div>
+      <span class="f-icon">🔒</span>
+      <div class="f-name">Zero Trust</div>
+      <div class="f-desc">Endpoint registered in Tollgate — identity-aware proxy, JWT auth. No open ports, no VPN, no public IPs.</div>
+      <div class="f-time">2:00</div>
+    </div>
+    <div class="flow-step">
+      <div class="f-num">06</div>
+      <span class="f-icon">✅</span>
+      <div class="f-name">Ready</div>
+      <div class="f-desc">Developer gets HTTPS URL, not raw IP. Audit log written. Cost recorded.</div>
+      <div class="f-time">2:14</div>
+    </div>
+  </div>
+</section>
 
-// ── demo симуляция конвертации ──
-function simulateEltexConversion(input) {
-  const lines = input.split('\n');
-  const out = [
-    '!', '! Generated by netconv — review before applying',
-    '! Source: Cisco IOS → Target: Eltex ESR', '!',
-    '! IMPORTANT: All interfaces assigned to security zones.',
-    '! Review zone assignments and firewall rules before applying.', '!', ''
-  ];
-  const items = [];
-  let exact = 0, approx = 0, manual = 0, unknown = 0;
+<section id="features" style="padding-top:0">
+  <div class="s-label">What you get</div>
+  <div class="features">
+    <div class="feat">
+      <div class="feat-tag">ZERO TRUST</div>
+      <div class="feat-title">No open ports by default</div>
+      <div class="feat-body">Every environment registers in Tollgate (identity-aware proxy, JWT auth) on provisioning. Developers access infra via HTTPS — never raw SSH from the internet.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-tag">GOVERNANCE</div>
+      <div class="feat-title">Policy enforced before apply</div>
+      <div class="feat-body">OPA policies run before every OpenTofu apply. Cost limits, security rules, mandatory tags — violations block provisioning with a clear error message.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-tag">MULTI-CLOUD</div>
+      <div class="feat-title">Switch cloud, keep interface</div>
+      <div class="feat-body">AWS, Yandex Cloud, Oracle Cloud, Hetzner. Same form, same outputs, same security baseline. Switch provider with a dropdown — zero code changes.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-tag">SELF-HOSTED</div>
+      <div class="feat-title">You own everything</div>
+      <div class="feat-body">No SaaS vendor. Runs on your GitHub and your cloud. Secrets never leave your perimeter. No monthly platform fee, no lock-in.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-tag">AUTO-LIFECYCLE</div>
+      <div class="feat-title">Resources expire automatically</div>
+      <div class="feat-body">Every resource has a mandatory expiry date. Auto-destroy on schedule, final backup before deletion. No zombie environments burning budget.</div>
+    </div>
+    <div class="feat">
+      <div class="feat-tag">AUDIT</div>
+      <div class="feat-title">Immutable audit trail</div>
+      <div class="feat-body">Every event logged with identity, timestamp, cost estimate, and policy results. Stored as GitHub Actions artifacts — tamper-evident by design.</div>
+    </div>
+  </div>
+</section>
 
-  const hostnameMatch = input.match(/^hostname\s+(\S+)/m);
-  if (hostnameMatch) {
-    out.push(`hostname ${hostnameMatch[1]}`); out.push('');
-    items.push({ severity:'Ok', category:'system', source_snippet:`hostname ${hostnameMatch[1]}`, target_snippet:`hostname ${hostnameMatch[1]}`, message:'Exact match', recommendation:null });
-    exact++;
-  }
+<section id="vs" style="padding-top:0">
+  <div class="s-label">vs alternatives</div>
 
-  // Security zones
-  out.push('security zone LAN'); out.push(' exit');
-  out.push('security zone WAN'); out.push(' exit'); out.push('');
-  out.push('security zone-pair LAN WAN'); out.push(' rule 10'); out.push('  action permit'); out.push('  enable'); out.push('  exit'); out.push(' exit'); out.push('');
-  items.push({ severity:'Warn', category:'security_zones', source_snippet:'# (no zones in Cisco IOS)', target_snippet:'security zone LAN/WAN', message:'ESR requires security zones on all interfaces — auto-generated. Review firewall rules.', recommendation:null });
-  approx++;
-
-  const ntpMatches = [...input.matchAll(/^ntp server\s+(\S+)/gm)];
-  ntpMatches.forEach(m => {
-    out.push(`ntp server ${m[1]}`);
-    items.push({ severity:'Ok', category:'ntp', source_snippet:`ntp server ${m[1]}`, target_snippet:`ntp server ${m[1]}`, message:'Exact match', recommendation:null });
-    exact++;
-  });
-  if (ntpMatches.length) out.push('');
-
-  const ifaceBlocks = [...input.matchAll(/^interface\s+(\S+)([\s\S]*?)(?=^interface|\nrouter\s|\nip route|\nip access|\nip nat|\nntp|\nsnmp|$)/gm)];
-  ifaceBlocks.forEach(block => {
-    const ifName = block[1]; const body = block[2];
-    const portNum = (ifName.match(/\d+$/) || ['1'])[0];
-    const esrName = ifName.match(/[Ll]oopback/) ? `loopback ${parseInt(portNum)+1}` : `gigabitethernet 1/0/${portNum}`;
-    const isWan = /nat outside/.test(body);
-    out.push('!'); out.push(`interface ${esrName}`);
-    const desc = body.match(/description\s+(.+)/);
-    if (desc) out.push(` description ${desc[1]}`);
-    out.push(` security-zone ${isWan ? 'WAN' : 'LAN'}`);
-    const ip = body.match(/ip address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)/);
-    if (ip) { out.push(` ip address ${ip[1]}/${maskToPrefix(ip[2])}`); exact++; }
-    if (/^\s+shutdown$/m.test(body)) out.push(' shutdown');
-    out.push(' exit'); out.push('');
-    approx++; // security zone
-  });
-
-  const routes = [...input.matchAll(/^ip route\s+(\S+)\s+(\S+)\s+(\S+)/gm)];
-  routes.forEach(r => {
-    const prefix = `${r[1]}/${maskToPrefix(r[2])}`;
-    out.push(`ip route ${prefix} ${r[3]}`);
-    items.push({ severity:'Warn', category:'static_route', source_snippet:`ip route ${r[1]} ${r[2]} ${r[3]}`, target_snippet:`ip route ${prefix} ${r[3]}`, message:'ESR: CIDR notation', recommendation:null });
-    approx++;
-  });
-  if (routes.length) out.push('');
-
-  out.push('!'); out.push('! Apply: esr# commit'); out.push('! esr# confirm');
-
-  const total = exact + approx + manual + unknown;
-  return {
-    success: true, config_text: out.join('\n'),
-    report: { source_vendor:'Cisco IOS', target_vendor:'Eltex ESR', total, exact, approximate:approx, manual_required:manual, unknown, coverage_pct: total > 0 ? Math.round((exact+approx)/total*100) : 0, items },
-    error: null
-  };
-}
-
-function maskToPrefix(mask) {
-  return mask.split('.').reduce((acc, oct) => acc + parseInt(oct).toString(2).split('').filter(b=>b==='1').length, 0);
-}
-
-function simulateConversion(input, src, dst) {
-  if (src !== 'ios' || (dst !== 'vrp' && dst !== 'eltex')) {
-    return {
-      success: false,
-      config_text: '',
-      report: { total:0, exact:0, approximate:0, manual_required:0, unknown:0, coverage_pct:0, items:[] },
-      error: `Pair ${src}→${dst} not supported in demo mode. Build WASM for full version.`
-    };
-  }
-  // Eltex demo — базовая симуляция
-  if (dst === 'eltex') {
-    return simulateEltexConversion(input);
-  }
-
-  const lines = input.split('\n');
-  const outputLines = [
-    '#',
-    '# Generated by netconv — review before applying',
-    '# Source: Cisco IOS → Target: Huawei VRP',
-    '#', ''
-  ];
-  const items = [];
-  let exact = 0, approx = 0, manual = 0, unknown = 0;
-
-  const hostnameMatch = input.match(/^hostname\s+(\S+)/m);
-  if (hostnameMatch) {
-    outputLines.push(`sysname ${hostnameMatch[1]}`);
-    outputLines.push('');
-    items.push({ severity:'Ok', category:'system', source_snippet:`hostname ${hostnameMatch[1]}`, target_snippet:`sysname ${hostnameMatch[1]}`, message:'Точное соответствие', recommendation:null });
-    exact++;
-  }
-
-  const ntpMatches = [...input.matchAll(/^ntp server\s+(\S+)(\s+prefer)?/gm)];
-  ntpMatches.forEach(m => {
-    const pref = m[2] ? ' preference' : '';
-    const dst_cmd = `ntp-service unicast-server ${m[1]}${pref}`;
-    outputLines.push(dst_cmd);
-    items.push({ severity:'Ok', category:'ntp', source_snippet:`ntp server ${m[1]}${m[2]||''}`, target_snippet:dst_cmd, message:'Точное соответствие', recommendation:null });
-    exact++;
-  });
-  if (ntpMatches.length) outputLines.push('');
-
-  const snmpComms = [...input.matchAll(/^snmp-server community\s+(\S+)\s+(RO|RW)/gm)];
-  if (snmpComms.length) {
-    outputLines.push('snmp-agent');
-    snmpComms.forEach(m => {
-      const access = m[2] === 'RO' ? 'read' : 'write';
-      const d = `snmp-agent community ${access} ${m[1]}`;
-      outputLines.push(d);
-      items.push({ severity:'Ok', category:'snmp', source_snippet:`snmp-server community ${m[1]} ${m[2]}`, target_snippet:d, message:'Точное соответствие', recommendation:null });
-      exact++;
-    });
-    outputLines.push('');
-  }
-
-  const ifaceBlocks = [...input.matchAll(/^interface\s+(\S+)([\s\S]*?)(?=^interface|\nrouter\s|\nip route|\nip access|\nip nat|\nntp|\nsnmp|$)/gm)];
-  ifaceBlocks.forEach(block => {
-    const ifName = block[1];
-    const body = block[2];
-    const vrpName = iosToVrpName(ifName);
-    outputLines.push('#');
-    outputLines.push(`interface ${vrpName}`);
-
-    const desc = body.match(/description\s+(.+)/);
-    if (desc) { outputLines.push(` description ${desc[1]}`); exact++; }
-
-    const shutdown = /^\s+shutdown$/m.test(body);
-    const noShutdown = /no shutdown/.test(body);
-    outputLines.push(shutdown ? ' shutdown' : ' undo shutdown');
-    exact++;
-
-    const ip = body.match(/ip address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)/);
-    if (ip) {
-      outputLines.push(` ip address ${ip[1]} ${ip[2]}`);
-      items.push({ severity:'Ok', category:'interface.ip', source_snippet:`ip address ${ip[1]} ${ip[2]}`, target_snippet:`ip address ${ip[1]} ${ip[2]}`, message:'Точное соответствие', recommendation:null });
-      exact++;
-    }
-
-    const helper = body.match(/ip helper-address\s+(\S+)/);
-    if (helper) {
-      outputLines.push(` dhcp relay server-ip ${helper[1]}`);
-      items.push({ severity:'Warn', category:'interface.helper', source_snippet:`ip helper-address ${helper[1]}`, target_snippet:`dhcp relay server-ip ${helper[1]}`, message:'Также требуется dhcp enable глобально и dhcp select relay на интерфейсе', recommendation:'Добавь: dhcp enable (глобально), dhcp select relay (на интерфейсе)' });
-      approx++;
-    }
-
-    const aclIn = body.match(/ip access-group\s+(\S+)\s+in/);
-    if (aclIn) {
-      outputLines.push(` traffic-filter inbound acl name ${aclIn[1]}`);
-      items.push({ severity:'Warn', category:'interface.acl', source_snippet:`ip access-group ${aclIn[1]} in`, target_snippet:`traffic-filter inbound acl name ${aclIn[1]}`, message:'VRP использует traffic-filter вместо access-group', recommendation:null });
-      approx++;
-    }
-
-    const standbyIp = body.match(/standby\s+(\d+)\s+ip\s+(\S+)/);
-    const standbyPrio = body.match(/standby\s+\d+\s+priority\s+(\d+)/);
-    const standbyPreempt = body.match(/standby\s+\d+\s+preempt(?:\s+delay\s+minimum\s+(\d+))?/);
-    if (standbyIp) {
-      outputLines.push(` vrrp vrid ${standbyIp[1]} virtual-ip ${standbyIp[2]}`);
-      if (standbyPrio) outputLines.push(` vrrp vrid ${standbyIp[1]} priority ${standbyPrio[1]}`);
-      if (standbyPreempt) outputLines.push(` vrrp vrid ${standbyIp[1]} preempt-mode timer delay ${standbyPreempt[1]||0}`);
-      items.push({
-        severity:'Warn', category:'hsrp_to_vrrp',
-        source_snippet:`standby ${standbyIp[1]} ip ${standbyIp[2]}`,
-        target_snippet:`vrrp vrid ${standbyIp[1]} virtual-ip ${standbyIp[2]}`,
-        message:'HSRP → VRRP: протоколы бинарно несовместимы. Переводи все узлы одновременно.',
-        recommendation:'HSRP MAC: 0000.0c07.acXX → VRRP MAC: 0000.5e00.01XX — разные multicast адреса'
-      });
-      approx++;
-    }
-
-    outputLines.push('');
-  });
-
-  const aclBlocks = [...input.matchAll(/^ip access-list\s+\S+\s+(\S+)([\s\S]*?)(?=^ip access-list|^router\s|^ip route|^ip nat|\nntp|^snmp|$)/gm)];
-  aclBlocks.forEach(block => {
-    outputLines.push('#');
-    outputLines.push(`acl name ${block[1]} advance`);
-    const entries = [...block[2].matchAll(/^\s+(\d+)?\s*(permit|deny)\s+(\S+)(.*)$/gm)];
-    entries.forEach((e, i) => {
-      const seq = e[1] || ((i+1)*10);
-      const action = e[2];
-      const proto = e[3];
-      const rest = e[4].trim();
-      outputLines.push(` rule ${seq} ${action} ${proto} ${rest.replace('any', 'source any destination any')}`);
-      items.push({ severity:'Warn', category:'acl.entry', source_snippet:`${seq} ${action} ${proto} ${rest}`, target_snippet:`rule ${seq} ${action} ${proto}`, message:'VRP ACL: rule вместо sequence, source/destination явные', recommendation:null });
-      approx++;
-    });
-    outputLines.push('');
-  });
-
-  const routes = [...input.matchAll(/^ip route\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)(?:\s+name\s+(\S+))?/gm)];
-  routes.forEach(r => {
-    const desc = r[4] ? ` description ${r[4]}` : '';
-    const d = `ip route-static ${r[1]} ${r[2]} ${r[3]}${desc}`;
-    outputLines.push(d);
-    items.push({ severity:'Warn', category:'static_route', source_snippet:`ip route ${r[1]} ${r[2]} ${r[3]}`, target_snippet:d, message:'VRP: ip route-static, preference вместо AD', recommendation:null });
-    approx++;
-  });
-  if (routes.length) outputLines.push('');
-
-  const ospfBlock = input.match(/^router ospf\s+(\d+)([\s\S]*?)(?=^router\s|^ip route|^ip access|^ip nat|^ntp|^snmp|$)/m);
-  if (ospfBlock) {
-    const pid = ospfBlock[1];
-    const body = ospfBlock[2];
-    const rid = body.match(/router-id\s+(\S+)/);
-    outputLines.push('#');
-    outputLines.push(`ospf ${pid} router-id ${rid ? rid[1] : '0.0.0.0'}`);
-
-    if (/log-adjacency-changes/.test(body)) {
-      outputLines.push(' log-peer-change');
-      items.push({ severity:'Warn', category:'ospf.log', source_snippet:'log-adjacency-changes', target_snippet:'log-peer-change', message:'VRP использует log-peer-change', recommendation:null });
-      approx++;
-    }
-    if (/default-information originate always/.test(body)) {
-      outputLines.push(' default-route-advertise always');
-      items.push({ severity:'Warn', category:'ospf.default', source_snippet:'default-information originate always', target_snippet:'default-route-advertise always', message:'VRP: default-route-advertise', recommendation:null });
-      approx++;
-    }
-
-    const redist = [...body.matchAll(/redistribute\s+(\S+)(?:\s+subnets)?/gm)];
-    redist.forEach(r => {
-      const src = r[1] === 'connected' ? 'direct' : r[1];
-      outputLines.push(` import-route ${src}`);
-      items.push({ severity:'Warn', category:'ospf.redistribute', source_snippet:`redistribute ${r[1]} subnets`, target_snippet:`import-route ${src}`, message:'VRP: import-route вместо redistribute, subnets не нужен', recommendation:null });
-      approx++;
-    });
-
-    const areas = {};
-    const nets = [...body.matchAll(/network\s+(\S+)\s+(\S+)\s+area\s+(\S+)/gm)];
-    nets.forEach(n => {
-      if (!areas[n[3]]) areas[n[3]] = [];
-      areas[n[3]].push([n[1], n[2]]);
-    });
-    Object.entries(areas).forEach(([area, nets]) => {
-      outputLines.push(` area ${area}`);
-      nets.forEach(([addr, wc]) => {
-        outputLines.push(`  network ${addr} ${wc}`);
-        items.push({ severity:'Ok', category:'ospf.network', source_snippet:`network ${addr} ${wc} area ${area}`, target_snippet:`network ${addr} ${wc} (area ${area})`, message:'Точное соответствие', recommendation:null });
-        exact++;
-      });
-      outputLines.push(' #');
-    });
-
-    const passive = [...body.matchAll(/passive-interface\s+(\S+)/gm)];
-    passive.forEach(p => {
-      outputLines.push(` silent-interface ${p[1]}`);
-      items.push({ severity:'Warn', category:'ospf.passive', source_snippet:`passive-interface ${p[1]}`, target_snippet:`silent-interface ${p[1]}`, message:'VRP: silent-interface вместо passive-interface', recommendation:null });
-      approx++;
-    });
-
-    outputLines.push('#');
-    outputLines.push('');
-  }
-
-  const natLine = input.match(/ip nat inside source list\s+(\S+)\s+interface\s+(\S+)\s+overload/);
-  if (natLine) {
-    const wanVrp = iosToVrpName(natLine[2]);
-    outputLines.push('# --- NAT ---');
-    outputLines.push(`interface ${wanVrp}`);
-    outputLines.push(` nat outbound ${natLine[1]}`);
-    outputLines.push('');
-    items.push({ severity:'Warn', category:'nat.overload', source_snippet:`ip nat inside source list ${natLine[1]} interface ${natLine[2]} overload`, target_snippet:`nat outbound ${natLine[1]} (на WAN интерфейсе)`, message:'VRP NAT: привязывается к интерфейсу через nat outbound', recommendation:'Также добавь nat enable глобально' });
-    approx++;
-  }
-
-  outputLines.push('return');
-
-  const total = exact + approx + manual + unknown;
-  const coverage = total > 0 ? Math.round((exact + approx) / total * 100) : 0;
-
-  return {
-    success: true,
-    config_text: outputLines.join('\n'),
-    report: {
-      source_vendor: 'Cisco IOS',
-      target_vendor: 'Huawei VRP',
-      total, exact, approximate: approx, manual_required: manual, unknown,
-      coverage_pct: coverage,
-      items
-    },
-    error: null
-  };
-}
-
-function iosToVrpName(name) {
-  const expansions = [
-    [/^Gi(\d.*)/, 'GigabitEthernet'],
-    [/^Fa(\d.*)/, 'FastEthernet'],
-    [/^Te(\d.*)/, 'XGigabitEthernet'],
-    [/^Lo(\d+)/, 'LoopBack'],
-    [/^Tu(\d+)/, 'Tunnel'],
-    [/^Vl(\d+)/, 'Vlanif'],
-  ];
-  for (const [re, full] of expansions) {
-    const m = name.match(re);
-    if (m) name = full + m[1];
-    else if (name.toLowerCase().startsWith(full.toLowerCase().slice(0,4))) {
-      const parts = name.replace(/^\D+/, '').split('/');
-      if (parts.length === 2) name = name.replace(/\d+\/\d+$/, `0/${parts[0]}/${parts[1]}`);
-    }
-  }
-  if (/^GigabitEthernet\d+\/\d+$/.test(name)) {
-    name = name.replace(/(\d+)\/(\d+)$/, '0/$1/$2');
-  }
-  if (/^Loopback/i.test(name)) name = name.replace(/^Loopback/i, 'LoopBack');
-  return name;
-}
-
-// ── UI functions ──
-function loadExample() {
-  document.getElementById('input-area').value = EXAMPLE_CONFIG;
-}
-
-function clearInput() {
-  document.getElementById('input-area').value = '';
-}
-
-function copyOutput() {
-  const text = document.getElementById('output-area').value;
-  if (!text) return;
-  navigator.clipboard.writeText(text).then(() => showToast());
-}
-
-function showToast() {
-  const t = document.getElementById('toast');
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 1800);
-}
-
-function setFilter(filter, btn) {
-  currentFilter = filter;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderReportItems();
-}
-
-function runConvert() {
-  const input = document.getElementById('input-area').value.trim();
-  if (!input) return;
-
-  const src = document.getElementById('src-vendor').value;
-  const dst = document.getElementById('dst-vendor').value;
-  const btn = document.getElementById('btn-convert');
-
-  btn.disabled = true;
-
-  document.getElementById('output-empty').style.display = 'none';
-  document.getElementById('output-area').style.display = 'none';
-  document.getElementById('copy-btn').style.display = 'none';
-  document.getElementById('loading').classList.add('active');
-  document.getElementById('report-empty').style.display = 'none';
-  document.getElementById('report-body').style.display = 'none';
-  document.getElementById('report-loading').classList.add('active');
-  document.getElementById('stat-pills').innerHTML = '';
-  document.getElementById('coverage-wrap').style.display = 'none';
-
-  // Небольшая задержка для UX — имитация async
-  setTimeout(() => {
-    try {
-      const raw = convert_config(input, src, dst);
-      const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
-
-      document.getElementById('loading').classList.remove('active');
-      document.getElementById('report-loading').classList.remove('active');
-
-      if (!result.success) {
-        document.getElementById('output-area').value = `# Ошибка: ${result.error}`;
-        document.getElementById('output-area').style.display = 'block';
-        renderStats(result.report);
-        allItems = [];
-        renderReportItems();
-      } else {
-        document.getElementById('output-area').value = result.config_text;
-        document.getElementById('output-area').style.display = 'block';
-        document.getElementById('copy-btn').style.display = 'block';
-        allItems = result.report.items || [];
-        renderStats(result.report);
-        renderReportItems();
-        document.getElementById('report-body').style.display = 'block';
-      }
-    } catch(e) {
-      document.getElementById('loading').classList.remove('active');
-      document.getElementById('report-loading').classList.remove('active');
-      document.getElementById('output-area').value = `# Ошибка: ${e.message}`;
-      document.getElementById('output-area').style.display = 'block';
-    }
-
-    btn.disabled = false;
-  }, 120);
-}
-
-function renderStats(report) {
-  const pills = document.getElementById('stat-pills');
-  pills.innerHTML = `
-    <span class="stat-pill pill-ok"><span class="dot"></span><span class="val">${report.exact}</span> точно</span>
-    <span class="stat-pill pill-warn"><span class="dot"></span><span class="val">${report.approximate}</span> с допущениями</span>
-    <span class="stat-pill pill-err"><span class="dot"></span><span class="val">${report.manual_required}</span> вручную</span>
-    <span class="stat-pill pill-info"><span class="dot"></span><span class="val">${report.unknown}</span> неизвестно</span>
-  `;
-
-  const cov = Math.round(report.coverage_pct || 0);
-  const covWrap = document.getElementById('coverage-wrap');
-  covWrap.style.display = 'flex';
-  document.getElementById('coverage-label').textContent = `${cov}%`;
-  document.getElementById('coverage-fill').style.width = `${cov}%`;
-}
-
-function renderReportItems() {
-  const body = document.getElementById('report-body');
-  const filtered = currentFilter === 'all'
-    ? allItems
-    : allItems.filter(i => i.severity === currentFilter);
-
-  if (!filtered.length) {
-    body.innerHTML = `<div style="padding:16px;font-family:var(--mono);font-size:12px;color:var(--text3);">нет элементов для этого фильтра</div>`;
-    body.style.display = 'block';
-    return;
-  }
-
-  body.innerHTML = filtered.map(item => {
-    const sevClass = { Ok:'sev-ok', Warn:'sev-warn', Error:'sev-err', Info:'sev-info' }[item.severity] || 'sev-info';
-    const sevLabel = { Ok:'ok', Warn:'warn', Error:'manual', Info:'unknown' }[item.severity] || item.severity.toLowerCase();
-    const rec = item.recommendation ? `<div style="margin-top:3px;color:var(--accent);font-size:11px;font-family:var(--mono);">→ ${escHtml(item.recommendation)}</div>` : '';
-
-    return `<div class="report-item">
-      <div><span class="ri-sev ${sevClass}">${sevLabel}</span></div>
-      <div class="ri-cat">${escHtml(item.category)}</div>
-      <div class="ri-msg">${escHtml(item.message)}${rec}</div>
-      <div class="ri-snip">
-        ${item.source_snippet ? `<div class="snip-row"><span class="snip-label">было</span><span class="snip-from">${escHtml(item.source_snippet.slice(0,80))}</span></div>` : ''}
-        ${item.target_snippet ? `<div class="snip-row"><span class="snip-label">стало</span><span class="snip-to">${escHtml(item.target_snippet.slice(0,80))}</span></div>` : ''}
+  <div class="why-not">
+    <div class="why-not-label">Why not just Terraform + Ansible?</div>
+    <div class="why-not-grid">
+      <div>
+        <div class="why-item-title">No self-service</div>
+        <div class="why-item-body">Raw Terraform requires CLI, state management, and provider knowledge. Developers can't use it without training — someone always ends up being the bottleneck.</div>
       </div>
-    </div>`;
-  }).join('');
-}
+      <div>
+        <div class="why-item-title">No governance</div>
+        <div class="why-item-body">Nothing stops a developer from opening port 5432 to 0.0.0.0/0 or spinning a $500/mo instance. Policy is a README, not enforcement.</div>
+      </div>
+      <div>
+        <div class="why-item-title">No lifecycle</div>
+        <div class="why-item-body">Terraform doesn't know when a resource should die. Staging environments from 6 months ago accumulate silently and burn budget.</div>
+      </div>
+      <div>
+        <div class="why-item-title">No Zero Trust</div>
+        <div class="why-item-body">Terraform creates the VM. Access control, network isolation, and audit trail are entirely your problem to solve separately — every time.</div>
+      </div>
+    </div>
+  </div>
 
-function escHtml(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+  <table class="vs">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th class="us">infra/platform</th>
+        <th>Backstage</th>
+        <th>Atlantis</th>
+        <th>Pulumi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>No CLI for developers</td>
+        <td class="us"><span class="ck">✓</span> GitHub UI form</td>
+        <td><span class="ck">✓</span></td>
+        <td><span class="xx">✗</span> PR-based</td>
+        <td><span class="xx">✗</span> SDK required</td>
+      </tr>
+      <tr>
+        <td>Zero Trust built in</td>
+        <td class="us"><span class="ck">✓</span> Tollgate, JWT auth</td>
+        <td><span class="xx">✗</span> plugin needed</td>
+        <td><span class="xx">✗</span></td>
+        <td><span class="xx">✗</span></td>
+      </tr>
+      <tr>
+        <td>Fully self-hosted</td>
+        <td class="us"><span class="ck">✓</span></td>
+        <td><span class="ck">✓</span></td>
+        <td><span class="ck">✓</span></td>
+        <td><span class="xx">✗</span> Pulumi Cloud</td>
+      </tr>
+      <tr>
+        <td>Setup time</td>
+        <td class="us"><span class="ck">✓</span> &lt; 1 hour</td>
+        <td><span class="xx">✗</span> days</td>
+        <td>hours</td>
+        <td>hours</td>
+      </tr>
+      <tr>
+        <td>Pre-apply policy (OPA)</td>
+        <td class="us"><span class="ck">✓</span> built in</td>
+        <td>plugin needed</td>
+        <td><span class="xx">✗</span></td>
+        <td>Crossguard add-on</td>
+      </tr>
+      <tr>
+        <td>Auto resource expiry</td>
+        <td class="us"><span class="ck">✓</span> built in</td>
+        <td><span class="xx">✗</span></td>
+        <td><span class="xx">✗</span></td>
+        <td><span class="xx">✗</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
 
-// ── keyboard shortcut: Ctrl+Enter ──
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-    e.preventDefault();
-    runConvert();
-  }
-});
+<div class="cta">
+  <h2>Platform engineering<br><em>without a platform team.</em></h2>
+  <p class="cta-sub">Open source. Self-hosted. Production-ready in under an hour.</p>
+  <div class="cta-cmd">git clone https://github.com/<em>casablanque-code</em>/platform-infra</div>
+  <br><br>
+  <a href="https://github.com/casablanque-code/platform-infra" class="btn btn-solid">View on GitHub →</a>
+</div>
 
-// ── WASM loader ──
-// Пытаемся загрузить реальный WASM модуль.
-// Если не найден (открыт как standalone HTML) — остаёмся в demo mode.
-(async function() {
-  try {
-    // wasm-pack build --target web генерирует netconv_wasm.js рядом с .wasm
-    const wasmModule = await import('./wasm/netconv_wasm.js');
-    await wasmModule.default();  // init()
+<footer>
+  <div class="f-copy">infra/platform — open source, MIT license</div>
+  <div class="f-links">
+    <a href="https://github.com/casablanque-code/platform-infra">GitHub</a>
+    <a href="https://andrewdoronin.pages.dev">Portfolio</a>
+  </div>
+</footer>
 
-    // Перекрываем demo-функцию реальной
-    window._wasmConvertConfig = wasmModule.convert_config;
-
-    wasmLoaded = true;
-    const notice = document.getElementById('wasm-notice');
-    if (notice) notice.classList.remove('show');
-    console.log('[netconv] WASM loaded ✓');
-  } catch (e) {
-    // Нет WASM — demo mode, уже настроен
-    const notice = document.getElementById('wasm-notice');
-    if (notice) notice.classList.add('show');
-    console.log('[netconv] WASM not found, running in demo mode:', e.message);
-  }
-})();
-</script>
 </body>
 </html>
