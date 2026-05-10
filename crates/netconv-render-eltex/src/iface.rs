@@ -1,6 +1,7 @@
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
-use crate::security::classify_zone;
+use crate::security::{classify_zone, ZoneName};
+use netconv_core::report::ConfidenceLevel;
 
 pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
     // Fix: дедупликация по ESR имени — GE и FE могут маппиться в одно имя
@@ -55,16 +56,22 @@ fn render_interface(
 
     // Security zone — из classify_zone
     let zone = classify_zone(iface, cfg);
-    let zone_name = zone.zone.as_str();
-    out.push(format!(" security-zone {}", zone_name));
-
-    let zone_note = format!("classified as {}: {}", zone_name, zone.reason);
-    report.add_approximate(
-        "interface.security_zone",
-        &format!("# (no zone in Cisco IOS for {})", iface.name.original),
-        &format!("security-zone {}", zone_name),
-        &format!("ESR: security-zone mandatory. {}.", zone_note),
-    );
+    match zone.zone {
+        ZoneName::Wan | ZoneName::Lan => {
+            // Известная зона — генерим команду
+            out.push(format!(" security-zone {}", zone.zone.as_str()));
+            if zone.confidence == ConfidenceLevel::Medium {
+                out.push(format!(" ! ⚠ MEDIUM confidence: {} — verify before applying", zone.reason));
+            }
+        }
+        ZoneName::Unknown => {
+            // Неизвестная зона — НЕ генерим команду, только комментарий
+            out.push(format!(" ! security-zone NOT SET — manual assignment required"));
+            out.push(format!(" ! Reason: {}", zone.reason));
+            out.push(format!(" ! After assigning zone, add: security-zone <ZONE_NAME>"));
+        }
+    }
+    // Не дублируем в report — aggregate entry уже в security_zones
 
     // IP addresses (CIDR)
     for (i, addr) in iface.addresses.iter().enumerate() {
