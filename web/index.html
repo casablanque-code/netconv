@@ -397,6 +397,19 @@ textarea:focus { background: var(--bg); }
 }
 
 /* ── scrollbars ── */
+.hljs { background: transparent !important; }
+/* Cisco IOS / VRP syntax colors tuned for dark theme */
+.hljs-keyword, .hljs-selector-tag { color: #4a9eff !important; } /* commands */
+.hljs-string  { color: #e8a030 !important; }  /* descriptions, names */
+.hljs-comment { color: #555c68 !important; font-style: italic; }  /* ! comments */
+.hljs-number  { color: #3dba78 !important; }  /* IPs, numbers */
+.hljs-built_in { color: #b8e0c8 !important; } /* interface names */
+.hljs-attr    { color: #c792ea !important; }   /* keywords like ip, no */
+
+/* override hljs pre/code defaults */
+#output-highlighted pre { background: transparent !important; }
+#output-highlighted .hljs { color: var(--text) !important; }
+
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -453,6 +466,9 @@ textarea:focus { background: var(--bg); }
   .ri-snip { display: none; }
 }
 </style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cisco.min.js"></script>
 </head>
 <body>
 
@@ -512,12 +528,12 @@ textarea:focus { background: var(--bg); }
       <div class="spinner"></div>
       <span>конвертация...</span>
     </div>
-    <textarea
-      id="output-area"
-      spellcheck="false"
-      readonly
-      style="display:none;"
-    ></textarea>
+    <div id="output-highlighted" style="display:none;flex:1;overflow:auto;min-height:0;">
+      <pre style="margin:0;height:100%;"><code id="output-code" class="language-cisco"
+        style="font-family:var(--mono);font-size:12.5px;line-height:1.65;
+               background:transparent;padding:16px;display:block;min-height:100%;
+               white-space:pre;"></code></pre>
+    </div>
   </div>
 
   <!-- report panel -->
@@ -949,10 +965,11 @@ function clearInput() {
   document.getElementById('input-area').value = '';
 }
 
+let _outputRawText = '';
+
 function copyOutput() {
-  const text = document.getElementById('output-area').value;
-  if (!text) return;
-  navigator.clipboard.writeText(text).then(() => showToast());
+  if (!_outputRawText) return;
+  navigator.clipboard.writeText(_outputRawText).then(() => showToast());
 }
 
 function showToast() {
@@ -979,7 +996,7 @@ function runConvert() {
   btn.disabled = true;
 
   document.getElementById('output-empty').style.display = 'none';
-  document.getElementById('output-area').style.display = 'none';
+  document.getElementById('output-highlighted').style.display = 'none';
   document.getElementById('copy-btn').style.display = 'none';
   document.getElementById('loading').classList.add('active');
   document.getElementById('report-empty').style.display = 'none';
@@ -998,14 +1015,22 @@ function runConvert() {
       document.getElementById('report-loading').classList.remove('active');
 
       if (!result.success) {
-        document.getElementById('output-area').value = `# Ошибка: ${result.error}`;
-        document.getElementById('output-area').style.display = 'block';
+        _outputRawText = `# Ошибка: ${result.error}`;
+        const codeElErr = document.getElementById('output-code');
+        codeElErr.textContent = _outputRawText;
+        codeElErr.className = 'language-cisco';
+        hljs.highlightElement(codeElErr);
+        document.getElementById('output-highlighted').style.display = 'block';
         renderStats(result.report);
         allItems = [];
         renderReportItems();
       } else {
-        document.getElementById('output-area').value = result.config_text;
-        document.getElementById('output-area').style.display = 'block';
+        _outputRawText = result.config_text;
+        const codeEl = document.getElementById('output-code');
+        codeEl.textContent = result.config_text;
+        codeEl.className = 'language-cisco';
+        hljs.highlightElement(codeEl);
+        document.getElementById('output-highlighted').style.display = 'block';
         document.getElementById('copy-btn').style.display = 'block';
         allItems = result.report.items || [];
         renderStats(result.report);
@@ -1015,8 +1040,10 @@ function runConvert() {
     } catch(e) {
       document.getElementById('loading').classList.remove('active');
       document.getElementById('report-loading').classList.remove('active');
-      document.getElementById('output-area').value = `# Ошибка: ${e.message}`;
-      document.getElementById('output-area').style.display = 'block';
+      _outputRawText = `# Ошибка: ${e.message}`;
+      const codeElEx = document.getElementById('output-code');
+      codeElEx.textContent = _outputRawText;
+      document.getElementById('output-highlighted').style.display = 'block';
     }
 
     btn.disabled = false;
