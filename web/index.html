@@ -466,7 +466,38 @@ textarea:focus { background: var(--bg); }
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cisco.min.js"></script>
+<script>
+// Кастомный язык для сетевых конфигов (IOS / VRP / ESR)
+hljs.registerLanguage('netconfig', function(hljs) {
+  return {
+    name: 'netconfig',
+    case_insensitive: true,
+    contains: [
+      // Комментарии: ! и #
+      { className: 'comment', begin: /[!#]/, end: /$/ },
+      // IP адреса
+      { className: 'number',
+        begin: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?/ },
+      // Числа (AS, VLAN, priority и т.д.)
+      { className: 'number', begin: /\d+/ },
+      // Строки в кавычках (description)
+      hljs.QUOTE_STRING_MODE,
+      // Ключевые команды первым словом строки
+      { className: 'keyword',
+        begin: /^[ 	]*(interface|router|ip|ipv6|no |undo |shutdown|exit|vlan|spanning-tree|security|nat|bgp|ospf|eigrp|route|access-list|username|hostname|sysname|ntp|snmp|aaa|line|end|return|commit|confirm)/,
+        relevance: 10 },
+      // Имена интерфейсов
+      { className: 'built_in',
+        begin: /(GigabitEthernet|FastEthernet|TenGigabitEthernet|Loopback|Vlan(if)?|Tunnel|Serial|gigabitethernet|tengigabitethernet|loopback|vlan)\s*\d[\d\/.]*/,
+        relevance: 5 },
+      // Строки после description/name/sysname
+      { className: 'string',
+        begin: /(description|name|sysname)\s+/,
+        end: /$/ },
+    ]
+  };
+});
+</script>
 </head>
 <body>
 
@@ -526,8 +557,8 @@ textarea:focus { background: var(--bg); }
       <div class="spinner"></div>
       <span>конвертация...</span>
     </div>
-    <div id="output-highlighted" style="display:none;flex:1;overflow:hidden;min-height:0;position:relative;">
-      <pre id="output-pre" style="margin:0;height:100%;overflow:auto;"><code id="output-code" class="language-cisco"></code></pre>
+    <div id="output-highlighted" style="display:none;flex:1;overflow:auto;min-height:0;">
+      <pre id="output-pre" style="margin:0;background:var(--bg);height:100%;"><code id="output-code" class="language-netconfig"></code></pre>
     </div>
     <textarea
       id="output-area"
@@ -973,7 +1004,7 @@ function showHighlightedOutput(text) {
   // Сбрасываем подсветку перед новым текстом
   code.removeAttribute('data-highlighted');
   code.textContent = text;
-  code.className = 'language-cisco';
+  code.className = 'language-netconfig';
   hljs.highlightElement(code);
   document.getElementById('output-highlighted').style.display = 'flex';
   document.getElementById('output-empty').style.display = 'none';
