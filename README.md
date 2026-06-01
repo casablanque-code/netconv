@@ -14,7 +14,7 @@ netconv build router.cfg --target vrp
 
 Like a compiler: source → IR → target. Unlike a converter: every approximation is documented, every risk is flagged, nothing is silently wrong.
 
-**Live demo:** https://netconv.casablanque.workers.dev
+**Live demo:** https://netconv.casablanque.com
 
 ---
 
