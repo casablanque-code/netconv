@@ -13,6 +13,7 @@ pub fn render_system(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Co
     render_line_vty(cfg, out, report);
     render_logging(cfg, out, report);
     render_aaa(cfg, out, report);
+    render_banner(cfg, out, report);
     render_platform_specific(cfg, out);
 }
 
@@ -345,6 +346,31 @@ fn render_aaa(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
         "aaa new-model",
         "AAA configuration requires manual setup on VRP.          Authentication schemes and domains differ fundamentally from Cisco AAA.",
         Some("aaa → authentication-scheme LOCAL_AUTH → domain default → authentication-scheme LOCAL_AUTH"),
+    );
+    out.push(String::new());
+}
+
+fn render_banner(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let banner = match &cfg.banner { Some(b) => b, None => return };
+
+    // Cisco: banner motd ^C <текст> ^C  (или banner login/exec — структура схожая)
+    // VRP:   header login/shell information "<текст>"
+    // Точная разметка delimiter-ов (^C ... ^C) и многострочный текст внутри
+    // banner на Cisco не парсятся структурно (см. tree.rs — banner попадает
+    // в IR одной строкой как есть), поэтому не пытаемся сгенерировать рабочую
+    // VRP-команду автоматически — слишком велик риск сломать кавычки/escaping.
+    // Вместо этого явно сохраняем исходный текст и помечаем Manual, чтобы
+    // banner не терялся молча.
+    out.push("#".to_string());
+    out.push("# MANUAL: Cisco banner — перенеси текст вручную в VRP формат:".to_string());
+    out.push("#   header login information \"<текст баннера>\"".to_string());
+    out.push(format!("#   Исходный текст: {}", banner));
+    report.add_manual(
+        "banner",
+        banner,
+        "Banner текст и delimiter-ы (^C ... ^C) не парсятся структурно — \
+         перенеси текст вручную в 'header login information \"...\"' на VRP.",
+        Some("header login information \"<текст>\""),
     );
     out.push(String::new());
 }
