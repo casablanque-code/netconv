@@ -537,14 +537,14 @@ hljs.registerLanguage('netconfig', function(hljs) {
     <div class="vendor-selects">
       <select id="src-vendor">
         <option value="ios">Cisco IOS</option>
-        <option value="asa">Cisco ASA</option>
-        <option value="vrp">Huawei VRP</option>
+        <option value="asa" disabled>Cisco ASA (скоро)</option>
+        <option value="vrp" disabled>Huawei VRP (скоро)</option>
       </select>
       <span class="arrow-label">→</span>
       <select id="dst-vendor">
         <option value="vrp">Huawei VRP</option>
         <option value="eltex">Eltex ESR</option>
-        <option value="vyos">VyOS</option>
+        <option value="vyos" disabled>VyOS (скоро)</option>
       </select>
     </div>
     <button class="btn-convert" id="btn-convert" onclick="runConvert()">convert</button>
