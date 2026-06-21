@@ -35,106 +35,19 @@ impl RawNode {
     }
 }
 
+fn leading_spaces(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
 /// Корень дерева — список top-level нод
 #[derive(Debug)]
 pub struct RawTree {
     pub nodes: Vec<RawNode>,
 }
 
-impl RawTree {
-    pub fn parse(input: &str) -> Self {
-        let _roots: Vec<RawNode> = vec![];
-        // стек: (indent, index в текущем родителе)
-        // используем Vec<usize> — индексы в roots для корня,
-        // но для вложенности нам нужен mutable стек
-        // Проще: flat list + post-process в дерево через стек
-
-        let lines: Vec<(usize, usize, &str)> = input
-            .lines()
-            .enumerate()
-            .filter_map(|(i, line)| {
-                let trimmed = line.trim_end();
-                // Пропускаем пустые и комментарии
-                if trimmed.is_empty() || trimmed.starts_with('!') {
-                    return None;
-                }
-                let indent = leading_spaces(trimmed);
-                let text = trimmed.trim();
-                if text.is_empty() {
-                    return None;
-                }
-                Some((i + 1, indent, text))
-            })
-            .collect();
-
-        // Строим дерево итеративно через стек
-        // stk хранит (indent_level, mutable_ref) — не работает с Rust borrow
-        // Используем индексный подход: flat vec + parent indices
-
-        let flat: Vec<(usize, usize, String)> = lines
-            .iter()
-            .map(|(ln, ind, txt)| (*ln, *ind, txt.to_string()))
-            .collect();
-
-        // Конвертируем flat list в дерево рекурсивно
-        let tree = build_tree(&flat, 0, 0).0;
-
-        RawTree { nodes: tree }
-    }
-}
-
-fn leading_spaces(line: &str) -> usize {
-    line.len() - line.trim_start().len()
-}
-
-/// Рекурсивно строим дерево из flat списка.
-/// Возвращает (nodes, consumed_count)
-fn build_tree(
-    flat: &[(usize, usize, String)],
-    start: usize,
-    parent_indent: usize,
-) -> (Vec<RawNode>, usize) {
-    let mut nodes = vec![];
-    let mut i = start;
-
-    while i < flat.len() {
-        let (ln, indent, text) = &flat[i];
-
-        // Если отступ меньше или равен родительскому — выходим
-        if *indent <= parent_indent && start != 0 {
-            break;
-        }
-        // На верхнем уровне (start==0) берём все indent==0
-        if start == 0 && *indent > 0 {
-            // это дочерний — должен быть добавлен к последнему root
-            if let Some(_last) = nodes.last_mut() {
-                let (_children, _consumed) = build_tree(flat, i, *indent - 1);
-                // Нет, нужно добавлять к последней ноде
-                // Перестроим: возвращаемся к итеративному подходу
-                break;
-            }
-            break;
-        }
-
-        let mut node = RawNode::new(*ln, *indent, text);
-        i += 1;
-
-        // Собираем дочерние — всё что идёт дальше с большим отступом
-        while i < flat.len() && flat[i].1 > *indent {
-            let (children, consumed) = build_tree(flat, i, *indent);
-            node.children.extend(children);
-            i += consumed;
-        }
-
-        nodes.push(node);
-    }
-
-    let consumed = i - start;
-    (nodes, consumed)
-}
-
 // ---------------------------------------------------------------------------
-// Более надёжная реализация через стек индексов
+// Построение дерева через стек индексов (единственная используемая реализация —
+// вызывается из IosParser::parse через parse_raw_tree)
 // ---------------------------------------------------------------------------
 
 pub fn parse_raw_tree(input: &str) -> RawTree {
