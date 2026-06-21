@@ -477,8 +477,12 @@ hljs.registerLanguage('netconfig', function(hljs) {
     name: 'netconfig',
     case_insensitive: true,
     contains: [
-      // Комментарии: ! и #
-      { className: 'comment', begin: /[!#]/, end: /$/ },
+      // Комментарии: ! и # — ТОЛЬКО в начале строки (с учётом отступа).
+      // Раньше begin: /[!#]/ без anchor ловил ! или # в любом месте строки,
+      // из-за чего весь остаток строки красился как комментарий даже когда
+      // символ был частью значения — например "description !!! CRITICAL !!!",
+      // пароль с восклицательным знаком, или просто "#" в произвольном тексте.
+      { className: 'comment', begin: /^[ \t]*[!#]/, end: /$/ },
       // IP адреса
       { className: 'number',
         begin: /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(\/\d{1,2})?/ },
