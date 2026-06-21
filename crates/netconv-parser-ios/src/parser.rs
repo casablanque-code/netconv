@@ -363,6 +363,39 @@ ip access-list standard NAT-ACL
         assert!(pool_unknown_reports.is_empty(), "ip nat pool не должен попадать в unknown report items");
     }
 
+    // Регрессия: найдено через падение интеграционного теста eltex_acl.
+    // "permit tcp any host <ip> eq 443" — порт после "host <ip>" вообще не
+    // парсился (parse_acl_match::"host" возвращал (Host(ip), None, 2),
+    // полностью игнорируя оставшиеся токены "eq 443"). dst_port был всегда
+    // None для любого extended ACL правила вида "... host X eq PORT".
+    #[test]
+    fn test_acl_port_after_host_is_parsed() {
+        let config = r#"
+hostname RTR
+!
+ip access-list extended ACL-TEST
+ 10 permit tcp any host 203.0.113.2 eq 443
+ 20 permit tcp host 10.0.0.5 eq 22 any
+"#;
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(config).unwrap();
+        assert_eq!(cfg.acls.len(), 1);
+        let entries = &cfg.acls[0].entries;
+        assert_eq!(entries.len(), 2);
+
+        // "any host 203.0.113.2 eq 443" — порт относится к dst (после host).
+        assert!(
+            matches!(entries[0].dst_port, Some(netconv_core::ir::AclPort::Eq(443))),
+            "expected dst_port = Eq(443), got {:?}", entries[0].dst_port
+        );
+
+        // "host 10.0.0.5 eq 22 any" — порт относится к src (после host, перед dst).
+        assert!(
+            matches!(entries[1].src_port, Some(netconv_core::ir::AclPort::Eq(22))),
+            "expected src_port = Eq(22), got {:?}", entries[1].src_port
+        );
+    }
+
     #[test]
     fn test_acl_entries_appear_in_report() {
         let parser = IosParser;
