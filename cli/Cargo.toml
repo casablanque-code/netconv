@@ -11,5 +11,6 @@ path = "src/main.rs"
 netconv-core = { path = "../crates/netconv-core" }
 netconv-parser-ios = { path = "../crates/netconv-parser-ios" }
 netconv-render-vrp = { path = "../crates/netconv-render-vrp" }
+netconv-render-eltex = { path = "../crates/netconv-render-eltex" }
 clap = { version = "=4.4.18", features = ["derive"] }
 serde_json = "1"
