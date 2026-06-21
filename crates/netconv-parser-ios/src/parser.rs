@@ -274,4 +274,125 @@ router bgp 65001
         assert!(af_unknowns.is_empty(),
             "address-family в unknown: {:?}", af_unknowns);
     }
+
+    // ---- NAT pool tests ----------------------------------------------------
+    // Регрессия: "ip nat pool NAME start end ..." ранее вообще не парсился,
+    // а ссылка "... pool NAME overload" создавала NatPool с 0.0.0.0-0.0.0.0.
+
+    const NAT_POOL_BEFORE_REF: &str = r#"
+hostname NAT-RTR
+!
+ip nat pool OFFICE-POOL 192.168.1.10 192.168.1.20 prefix-length 24
+ip nat inside source list NAT-ACL pool OFFICE-POOL overload
+!
+ip access-list standard NAT-ACL
+ 10 permit 10.0.0.0 0.0.0.255
+"#;
+
+    const NAT_POOL_AFTER_REF: &str = r#"
+hostname NAT-RTR
+!
+ip nat inside source list NAT-ACL pool OFFICE-POOL overload
+ip nat pool OFFICE-POOL 192.168.1.10 192.168.1.20 prefix-length 24
+!
+ip access-list standard NAT-ACL
+ 10 permit 10.0.0.0 0.0.0.255
+"#;
+
+    const NAT_POOL_UNDEFINED: &str = r#"
+hostname NAT-RTR
+!
+ip nat inside source list NAT-ACL pool MISSING-POOL overload
+!
+ip access-list standard NAT-ACL
+ 10 permit 10.0.0.0 0.0.0.255
+"#;
+
+    #[test]
+    fn test_nat_pool_resolved_when_declared_before_reference() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(NAT_POOL_BEFORE_REF).unwrap();
+        assert_eq!(cfg.nat.len(), 1);
+        let pool = cfg.nat[0].pool.as_ref().expect("pool should be resolved");
+        assert_eq!(pool.name, "OFFICE-POOL");
+        assert_eq!(pool.start, "192.168.1.10".parse::<std::net::IpAddr>().unwrap());
+        assert_eq!(pool.end, "192.168.1.20".parse::<std::net::IpAddr>().unwrap());
+        assert!(pool.prefix.is_some());
+    }
+
+    #[test]
+    fn test_nat_pool_resolved_when_declared_after_reference() {
+        // Объявление пула может идти позже ссылки на него в тексте конфига —
+        // двухпроходный сбор должен находить его в любом порядке.
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(NAT_POOL_AFTER_REF).unwrap();
+        assert_eq!(cfg.nat.len(), 1);
+        let pool = cfg.nat[0].pool.as_ref().expect("pool should be resolved");
+        assert_eq!(pool.start, "192.168.1.10".parse::<std::net::IpAddr>().unwrap());
+        assert_eq!(pool.end, "192.168.1.20".parse::<std::net::IpAddr>().unwrap());
+    }
+
+    #[test]
+    fn test_nat_pool_undefined_marked_manual_not_silently_zeroed() {
+        let parser = IosParser;
+        let (cfg, report) = parser.parse(NAT_POOL_UNDEFINED).unwrap();
+        assert_eq!(cfg.nat.len(), 1);
+        // Пул не найден — раньше тут молча подставлялся 0.0.0.0/0.0.0.0.
+        // Теперь это должно быть явно зафиксировано как manual в отчёте.
+        let manual_items: Vec<_> = report.items.iter()
+            .filter(|i| i.category == "nat.pool_undefined")
+            .collect();
+        assert_eq!(manual_items.len(), 1, "должен быть один manual item про неопределённый пул");
+        assert_eq!(manual_items[0].severity, netconv_core::report::Severity::Error);
+    }
+
+    #[test]
+    fn test_nat_pool_declaration_not_marked_unknown() {
+        // "ip nat pool NAME ..." сама команда не должна попадать в unknown_blocks /
+        // report как нераспознанная — она обрабатывается отдельным проходом.
+        let parser = IosParser;
+        let (cfg, report) = parser.parse(NAT_POOL_BEFORE_REF).unwrap();
+        let pool_unknowns: Vec<_> = cfg.unknown_blocks.iter()
+            .filter(|b| b.raw.contains("ip nat pool"))
+            .collect();
+        assert!(pool_unknowns.is_empty(), "ip nat pool не должен быть в unknown_blocks: {:?}", pool_unknowns);
+
+        let pool_unknown_reports: Vec<_> = report.items.iter()
+            .filter(|i| i.source_snippet.contains("ip nat pool") && i.severity == netconv_core::report::Severity::Info)
+            .collect();
+        assert!(pool_unknown_reports.is_empty(), "ip nat pool не должен попадать в unknown report items");
+    }
+
+    #[test]
+    fn test_acl_entries_appear_in_report() {
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(NAT_POOL_BEFORE_REF).unwrap();
+        assert_eq!(cfg.acls.len(), 1);
+    }
+
+    // Регрессия: ранее match-паттерн "ip address" внутри match tokens[1] был
+    // недостижим (tokens[1] — одно слово, "ip"), что было безобидно по
+    // итоговому поведению (обе ветки одинаково "тихо игнорируем"), но
+    // проверим явно, что разные "no ip ..." команды на интерфейсе не задевают
+    // addresses/shutdown по ошибке.
+    #[test]
+    fn test_no_ip_address_does_not_clear_other_ip_settings() {
+        let config = r#"
+hostname RTR
+!
+interface GigabitEthernet0/0
+ ip address 10.0.0.1 255.255.255.0
+ no ip redirects
+ no ip address
+ no shutdown
+"#;
+        let parser = IosParser;
+        let (cfg, _) = parser.parse(config).unwrap();
+        let iface = &cfg.interfaces[0];
+        // "no ip address" не убирает уже добавленный адрес из IR (он был
+        // добавлен отдельной командой "ip address ..." выше) — это
+        // соответствует прежнему поведению ("игнорируем" для no ip address).
+        assert_eq!(iface.addresses.len(), 1);
+        assert!(!iface.shutdown);
+    }
 }

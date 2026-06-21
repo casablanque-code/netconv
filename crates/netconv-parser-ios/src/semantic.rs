@@ -12,19 +12,72 @@ impl SemanticParser {
     pub fn analyze(&self, tree: &RawTree, report: &mut ConversionReport) -> NetworkConfig {
         let mut cfg = NetworkConfig::default();
 
+        // Первый проход: собираем именованные NAT-пулы (ip nat pool NAME start end ...).
+        // Нужен заранее, потому что "ip nat inside source list X pool NAME" может
+        // встретиться в конфиге раньше или позже самого объявления пула.
+        let nat_pools = self.collect_nat_pools(tree);
+
         for node in &tree.nodes {
-            self.dispatch_global(node, &mut cfg, report);
+            self.dispatch_global(node, &mut cfg, report, &nat_pools);
         }
 
         cfg
     }
 
-    fn dispatch_global(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    /// Собирает все "ip nat pool <name> <start> <end> ..." в карту по имени.
+    fn collect_nat_pools(&self, tree: &RawTree) -> std::collections::HashMap<String, NatPool> {
+        let mut pools = std::collections::HashMap::new();
+        for node in &tree.nodes {
+            let tokens: Vec<&str> = node.text.split_whitespace().collect();
+            if tokens.get(0) == Some(&"ip") && tokens.get(1) == Some(&"nat") && tokens.get(2) == Some(&"pool") {
+                if let Some(pool) = self.parse_nat_pool_decl(&tokens[3..]) {
+                    pools.insert(pool.name.clone(), pool);
+                }
+            }
+        }
+        pools
+    }
+
+    /// ip nat pool <name> <start-ip> <end-ip> {netmask <mask> | prefix-length <n>}
+    fn parse_nat_pool_decl(&self, tokens: &[&str]) -> Option<NatPool> {
+        let name = tokens.get(0)?.to_string();
+        let start: IpAddr = tokens.get(1)?.parse().ok()?;
+        let end: IpAddr = tokens.get(2)?.parse().ok()?;
+
+        let prefix = if let Some(pos) = tokens.iter().position(|&t| t == "prefix-length") {
+            tokens.get(pos + 1)
+                .and_then(|s| s.parse::<u8>().ok())
+                .and_then(|len| format!("{}/{}", start, len).parse().ok())
+        } else if let Some(pos) = tokens.iter().position(|&t| t == "netmask") {
+            tokens.get(pos + 1)
+                .and_then(|s| s.parse::<IpAddr>().ok())
+                .and_then(mask_to_prefix_len)
+                .and_then(|len| format!("{}/{}", start, len).parse().ok())
+        } else {
+            None
+        };
+
+        Some(NatPool {
+            name,
+            start,
+            end,
+            prefix,
+            overload: false,
+        })
+    }
+
+    fn dispatch_global(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+        nat_pools: &std::collections::HashMap<String, NatPool>,
+    ) {
         match node.keyword().to_lowercase().as_str() {
             "hostname" => {
                 cfg.hostname = node.args().first().map(|s| s.to_string());
             }
-            "ip" => self.handle_global_ip(node, cfg, report),
+            "ip" => self.handle_global_ip(node, cfg, report, nat_pools),
             "interface" => {
                 if let Some(iface) = self.parse_interface(node, report) {
                     cfg.interfaces.push(iface);
@@ -148,8 +201,13 @@ impl SemanticParser {
                 _ => self.unknown_iface_cmd(node, iface, report),
             },
             "no" if tokens.len() >= 2 => match tokens[1] {
-                "shutdown"   => iface.shutdown = false,
-                "ip address" => { /* no ip address — игнорируем */ }
+                "shutdown" => iface.shutdown = false,
+                // Было: "ip address" => ... — недостижимый паттерн, потому
+                // что tokens[1] это одно слово ("ip"), а не строка "ip address".
+                // Ветка никогда не срабатывала и проваливалась в _ (тот же
+                // итоговый игнор), но вводила в заблуждение при чтении кода.
+                // Правильная проверка многословной команды — через tokens.get(2).
+                "ip" if tokens.get(2) == Some(&"address") => { /* no ip address — игнорируем */ }
                 _ => { /* остальные no-команды — игнорируем тихо */ }
             },
             "shutdown" => iface.shutdown = true,
@@ -412,7 +470,13 @@ impl SemanticParser {
     // Global IP commands
     // -----------------------------------------------------------------------
 
-    fn handle_global_ip(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    fn handle_global_ip(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+        nat_pools: &std::collections::HashMap<String, NatPool>,
+    ) {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
         if tokens.len() < 2 { return; }
 
@@ -459,7 +523,7 @@ impl SemanticParser {
             "access-list" => {
                 self.handle_named_acl(node, cfg, report);
             }
-            "nat" => self.handle_nat(node, cfg, report),
+            "nat" => self.handle_nat(node, cfg, report, nat_pools),
             "route" => {
                 if let Some(route) = self.parse_static_route(&tokens[2..]) {
                     cfg.routing.static_routes.push(route);
@@ -574,7 +638,33 @@ impl SemanticParser {
         };
 
         // area map: area_id → OspfAreaConfig
-        let mut areas: std::collections::HashMap<String, OspfAreaConfig> = Default::default();
+        // Раньше использовался HashMap, чей итерационный порядок не
+        // гарантирован между запусками — это приводило к недетерминированному
+        // порядку area-блоков в сгенерированном конфиге (ложные диффы между
+        // прогонами на одном и том же входе). Используем Vec с линейным
+        // поиском: количество OSPF areas в реальных конфигах — единицы,
+        // редко больше десятка, так что O(n) поиск не создаёт проблем
+        // производительности, а порядок первого упоминания area в исходном
+        // конфиге сохраняется естественным образом.
+        let mut areas: Vec<(String, OspfAreaConfig)> = Vec::new();
+
+        fn get_or_insert_area<'a>(
+            areas: &'a mut Vec<(String, OspfAreaConfig)>,
+            key: &str,
+            area: OspfArea,
+        ) -> &'a mut OspfAreaConfig {
+            if let Some(pos) = areas.iter().position(|(k, _)| k == key) {
+                &mut areas[pos].1
+            } else {
+                areas.push((key.to_string(), OspfAreaConfig {
+                    area,
+                    networks: vec![],
+                    area_type: OspfAreaType::Normal,
+                    auth: None,
+                }));
+                &mut areas.last_mut().unwrap().1
+            }
+        }
 
         for child in &node.children {
             let tokens: Vec<&str> = child.text.split_whitespace().collect();
@@ -593,12 +683,7 @@ impl SemanticParser {
                         let net = OspfNetwork { prefix, wildcard: true };
 
                         let key = area_str.to_string();
-                        let entry = areas.entry(key).or_insert_with(|| OspfAreaConfig {
-                            area: area.clone(),
-                            networks: vec![],
-                            area_type: OspfAreaType::Normal,
-                            auth: None,
-                        });
+                        let entry = get_or_insert_area(&mut areas, &key, area);
                         entry.networks.push(net);
                     }
                 }
@@ -614,12 +699,7 @@ impl SemanticParser {
                         let area_str = tokens[1];
                         match tokens[2] {
                             "stub" => {
-                                let entry = areas.entry(area_str.to_string()).or_insert_with(|| OspfAreaConfig {
-                                    area: OspfArea::parse(area_str),
-                                    networks: vec![],
-                                    area_type: OspfAreaType::Normal,
-                                    auth: None,
-                                });
+                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
                                 entry.area_type = if tokens.get(3) == Some(&"no-summary") {
                                     OspfAreaType::StubNoSummary
                                 } else {
@@ -627,12 +707,7 @@ impl SemanticParser {
                                 };
                             }
                             "nssa" => {
-                                let entry = areas.entry(area_str.to_string()).or_insert_with(|| OspfAreaConfig {
-                                    area: OspfArea::parse(area_str),
-                                    networks: vec![],
-                                    area_type: OspfAreaType::Normal,
-                                    auth: None,
-                                });
+                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
                                 entry.area_type = if tokens.get(3) == Some(&"no-summary") {
                                     OspfAreaType::NssaNoSummary
                                 } else {
@@ -645,12 +720,7 @@ impl SemanticParser {
                                 } else {
                                     OspfAuth::Simple(String::new())
                                 };
-                                let entry = areas.entry(area_str.to_string()).or_insert_with(|| OspfAreaConfig {
-                                    area: OspfArea::parse(area_str),
-                                    networks: vec![],
-                                    area_type: OspfAreaType::Normal,
-                                    auth: None,
-                                });
+                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
                                 entry.auth = Some(auth);
                             }
                             _ => {}
@@ -685,7 +755,7 @@ impl SemanticParser {
             }
         }
 
-        process.areas = areas.into_values().collect();
+        process.areas = areas.into_iter().map(|(_, v)| v).collect();
         process
     }
 
@@ -1319,7 +1389,13 @@ impl SemanticParser {
     // NAT
     // -----------------------------------------------------------------------
 
-    fn handle_nat(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    fn handle_nat(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+        nat_pools: &std::collections::HashMap<String, NatPool>,
+    ) {
         // ip nat inside source list <acl> {pool <name> | interface <if>} [overload]
         // ip nat inside source static <local> <global>
         // ip nat pool <name> <start> <end> prefix-length <n>
@@ -1333,13 +1409,44 @@ impl SemanticParser {
                         let overload = tokens.contains(&"overload");
 
                         let (pool, iface_overload) = if let Some(pool_pos) = tokens.iter().position(|&t| t == "pool") {
-                            (tokens.get(pool_pos + 1).map(|s| NatPool {
-                                name: s.to_string(),
-                                start: "0.0.0.0".parse().unwrap(),
-                                end: "0.0.0.0".parse().unwrap(),
-                                prefix: None,
-                                overload,
-                            }), false)
+                            match tokens.get(pool_pos + 1) {
+                                Some(pool_name) => {
+                                    match nat_pools.get(*pool_name) {
+                                        // Пул объявлен где-то в конфиге ("ip nat pool NAME ...") —
+                                        // берём его реальные границы.
+                                        Some(found) => {
+                                            let mut p = found.clone();
+                                            p.overload = overload;
+                                            (Some(p), false)
+                                        }
+                                        // Ссылка на пул есть, а самого "ip nat pool NAME ..." в
+                                        // конфиге нет — границы неизвестны. Раньше тут тихо
+                                        // подставлялся 0.0.0.0-0.0.0.0 и отчёт считал это Approximate.
+                                        // Явно помечаем как Manual, чтобы не выдавать сломанный NAT
+                                        // за рабочий.
+                                        None => {
+                                            report.add_manual(
+                                                "nat.pool_undefined",
+                                                &node.full().to_string(),
+                                                &format!(
+                                                    "Ссылка на NAT-пул '{}', но 'ip nat pool {} <start> <end> ...' \
+                                                     не найден в исходном конфиге — границы пула неизвестны.",
+                                                    pool_name, pool_name
+                                                ),
+                                                Some("Найди определение пула в конфиге (возможно в другом файле/секции) и задай адреса вручную"),
+                                            );
+                                            (Some(NatPool {
+                                                name: pool_name.to_string(),
+                                                start: "0.0.0.0".parse().unwrap(),
+                                                end: "0.0.0.0".parse().unwrap(),
+                                                prefix: None,
+                                                overload,
+                                            }), false)
+                                        }
+                                    }
+                                }
+                                None => (None, false),
+                            }
                         } else if tokens.contains(&"interface") {
                             (None, true)
                         } else {
@@ -1378,11 +1485,15 @@ impl SemanticParser {
                     }
                 }
             }
+            // "ip nat pool NAME ..." — уже собрано первым проходом в collect_nat_pools.
+            // Здесь просто тихо принимаем, чтобы не помечать как unknown.
+            Some(&"pool") => {}
             _ => {
                 report.add_unknown(node.full(), "ip nat");
             }
         }
     }
+
 
     // -----------------------------------------------------------------------
     // VLAN
