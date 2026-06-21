@@ -1331,10 +1331,20 @@ impl SemanticParser {
         }
 
         match tokens[0] {
-            "any" => (AclMatch::Any, None, 1),
+            "any" => {
+                // Порт может идти сразу после "any" (например "permit tcp any eq 80 host X")
+                let (port, pc) = self.parse_port(&tokens[1..]);
+                (AclMatch::Any, port, 1 + pc)
+            }
             "host" => {
                 let ip = tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or("0.0.0.0".parse().unwrap());
-                (AclMatch::Host(ip), None, 2)
+                // Баг: порт после "host <ip>" раньше вообще не считывался —
+                // "permit tcp any host 203.0.113.2 eq 443" терял "eq 443"
+                // полностью (consumed было всегда 2, eq/443 оставались
+                // непрочитанными хвостом токенов). Нашлось через падение
+                // интеграционного теста eltex_acl на реальном "host X eq PORT".
+                let (port, pc) = self.parse_port(&tokens[2..]);
+                (AclMatch::Host(ip), port, 2 + pc)
             }
             addr_str => {
                 let addr: IpAddr = match addr_str.parse() {
