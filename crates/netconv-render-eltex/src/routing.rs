@@ -271,12 +271,20 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
     out.push("!".to_string());
     out.push("! NAT configuration".to_string());
 
+    // Раньше каждое правило одного типа генерировалось с одинаковым
+    // "ruleset SNAT_OVERLOAD" / "rule 10" — при нескольких NAT-правилах
+    // в исходном конфиге это создавало дублирующиеся блоки конфигурации
+    // (последний тихо перезаписывает предыдущий на устройстве).
+    // Индексируем ruleset/rule по порядковому номеру правила этого типа.
+    let mut overload_idx: u32 = 0;
+    let mut static_idx: u32 = 0;
+
     for rule in &cfg.nat {
         match &rule.rule_type {
             NatType::Overload => {
                 // ESR NAT source — SNAT с overload
                 // nat source
-                //  ruleset WAN_NAT
+                //  ruleset WAN_NAT_<N>
                 //   rule 10
                 //    match source-address 0.0.0.0/0
                 //    action source-nat interface
@@ -284,9 +292,11 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
                 //    exit
                 //   exit
                 //  exit
+                overload_idx += 1;
+                let ruleset_name = format!("SNAT_OVERLOAD_{}", overload_idx);
                 let acl = rule.acl.as_deref().unwrap_or("ANY");
                 out.push("nat source".to_string());
-                out.push(format!(" ruleset SNAT_OVERLOAD"));
+                out.push(format!(" ruleset {}", ruleset_name));
                 out.push("  rule 10".to_string());
                 if rule.interface_overload {
                     out.push("   action source-nat interface".to_string());
@@ -294,6 +304,8 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
                         out.push(format!("   ! WAN interface: {}", wan));
                     }
                 }
+                out.push(format!("   ! Source scope was limited by ACL '{}' on Cisco — \
+ESR 'match source-address' filter not auto-generated, verify scope manually", acl));
                 out.push("   enable".to_string());
                 out.push("   exit".to_string());
                 out.push("  exit".to_string());
@@ -302,23 +314,27 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
                 report.add_approximate(
                     "nat.overload",
                     &format!("ip nat inside source list {} interface <WAN> overload", acl),
-                    "nat source / ruleset SNAT_OVERLOAD / action source-nat interface",
+                    &format!("nat source / ruleset {} / action source-nat interface", ruleset_name),
                     "ESR NAT: иерархический синтаксис nat source → ruleset → rule. \
-                     Проверь привязку к интерфейсам через security zones.",
+                     Scope правила (исходный ACL) не переносится автоматически — \
+                     проверь привязку к интерфейсам через security zones и добавь \
+                     'match source-address' вручную, если требуется ограничить scope.",
                 );
             }
             NatType::Static => {
                 if let Some(entry) = &rule.static_entry {
                     // ESR static NAT:
                     // nat destination
-                    //  ruleset DNAT_STATIC
+                    //  ruleset DNAT_STATIC_<N>
                     //   rule 10
                     //    match destination-address <global>/32
                     //    action destination-nat <local>
                     //    enable
                     //    exit
+                    static_idx += 1;
+                    let ruleset_name = format!("DNAT_STATIC_{}", static_idx);
                     out.push("nat destination".to_string());
-                    out.push(" ruleset DNAT_STATIC".to_string());
+                    out.push(format!(" ruleset {}", ruleset_name));
                     out.push("  rule 10".to_string());
                     out.push(format!("   match destination-address {}/32", entry.global));
                     out.push(format!("   action destination-nat {}", entry.local));
@@ -330,7 +346,7 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
                     report.add_approximate(
                         "nat.static",
                         &format!("ip nat inside source static {} {}", entry.local, entry.global),
-                        "nat destination / ruleset / action destination-nat",
+                        &format!("nat destination / ruleset {} / action destination-nat", ruleset_name),
                         "ESR static NAT через nat destination ruleset. Синтаксис существенно отличается.",
                     );
                 }

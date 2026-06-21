@@ -3,11 +3,12 @@ use netconv_core::traits::convert;
 use netconv_core::report::Severity;
 use netconv_parser_ios::IosParser;
 use netconv_render_vrp::VrpRenderer;
+use netconv_render_eltex::EltexRenderer;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(name = "netconv")]
-#[command(about = "Network config converter — Cisco IOS → Huawei VRP (and more)")]
+#[command(about = "Network config converter — Cisco IOS → Huawei VRP / Eltex ESR")]
 #[command(version = "0.1.0")]
 struct Args {
     /// Путь к исходному конфигу
@@ -18,11 +19,11 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    /// Исходный вендор: ios, vrp
+    /// Исходный вендор: ios
     #[arg(long, default_value = "ios")]
     from: String,
 
-    /// Целевой вендор: vrp, eltex (скоро)
+    /// Целевой вендор: vrp, eltex
     #[arg(long, default_value = "vrp")]
     to: String,
 
@@ -56,9 +57,12 @@ fn main() {
         ("ios", "vrp") => {
             convert(&IosParser, &VrpRenderer, &input)
         }
+        ("ios", "eltex") => {
+            convert(&IosParser, &EltexRenderer, &input)
+        }
         (src, tgt) => {
             eprintln!("Пара {}->{} пока не поддерживается.", src, tgt);
-            eprintln!("Доступно: --from ios --to vrp");
+            eprintln!("Доступно: --from ios --to vrp | --from ios --to eltex");
             std::process::exit(1);
         }
     };
