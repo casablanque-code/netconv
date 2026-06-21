@@ -3,12 +3,15 @@ use netconv_core::report::ConversionReport;
 
 pub fn render_system(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
     render_hostname(cfg, out, report);
+    render_dns(cfg, out, report);
     render_ntp(cfg, out, report);
     render_snmp(cfg, out, report);
     render_users(cfg, out, report);
     render_ssh(cfg, out, report);
+    render_line_vty(cfg, out, report);
     render_logging(cfg, out, report);
     render_aaa_note(cfg, out, report);
+    render_banner(cfg, out, report);
 }
 
 fn render_hostname(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
@@ -164,6 +167,78 @@ fn render_logging(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conve
         || logging.buffered_size.is_some() {
         out.push(String::new());
     }
+}
+
+fn render_dns(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    if cfg.dns.is_empty() { return; }
+
+    // ESR DNS resolver syntax не верифицирован в этом проекте (в отличие от
+    // VRP, где есть подтверждённый паттерн 'dns resolve' / 'dns server <ip>').
+    // Раньше DNS-серверы парсились в IR и молча терялись — никакого следа в
+    // выводе или в отчёте. Явно сохраняем их как MANUAL вместо того чтобы
+    // либо потерять, либо угадать синтаксис устройства.
+    out.push("! MANUAL: DNS servers (verify exact ESR syntax before applying):".to_string());
+    for dns in &cfg.dns {
+        out.push(format!("!   ip name-server {}  ! source: ip name-server {}", dns, dns));
+        report.add_manual(
+            "dns",
+            &format!("ip name-server {}", dns),
+            "ESR DNS resolver syntax not verified in this tool — apply manually",
+            Some(&format!("Confirm and configure DNS server {} via ESR CLI documentation", dns)),
+        );
+    }
+    out.push(String::new());
+}
+
+fn render_line_vty(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let vty = match &cfg.line_vty { Some(v) => v, None => return };
+
+    // Как и с DNS — точный ESR-синтаксис для line vty (idle-timeout /
+    // transport input аналогов) не верифицирован в этом проекте. Раньше эти
+    // настройки парсились и полностью пропадали без следа. Сохраняем их
+    // явно как MANUAL.
+    out.push("! MANUAL: VTY line settings (verify exact ESR syntax before applying):".to_string());
+    if vty.exec_timeout_min > 0 || vty.exec_timeout_sec > 0 {
+        out.push(format!(
+            "!   exec-timeout {} {}  ! source: line vty exec-timeout",
+            vty.exec_timeout_min, vty.exec_timeout_sec
+        ));
+        report.add_manual(
+            "line_vty.timeout",
+            &format!("exec-timeout {} {}", vty.exec_timeout_min, vty.exec_timeout_sec),
+            "ESR line vty syntax not verified in this tool — apply manually",
+            None,
+        );
+    }
+    for proto in &vty.transport_input {
+        out.push(format!("!   transport input {}  ! source: line vty transport input", proto));
+        report.add_manual(
+            "line_vty.transport",
+            &format!("transport input {}", proto),
+            "ESR line vty syntax not verified in this tool — apply manually",
+            None,
+        );
+    }
+    out.push(String::new());
+}
+
+fn render_banner(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+    let banner = match &cfg.banner { Some(b) => b, None => return };
+
+    // Banner-текст и его delimiter-ы (^C ... ^C) не парсятся структурно
+    // (см. netconv-parser-ios::tree — banner сохраняется одной строкой как
+    // есть), поэтому не пытаемся сгенерировать рабочую ESR-команду
+    // автоматически. Сохраняем исходный текст и помечаем Manual.
+    out.push("! MANUAL: Cisco banner — перенеси текст вручную в ESR формат:".to_string());
+    out.push(format!("!   Исходный текст: {}", banner));
+    report.add_manual(
+        "banner",
+        banner,
+        "Banner текст и delimiter-ы (^C ... ^C) не парсятся структурно — \
+         перенеси текст вручную в соответствующую ESR-команду banner/motd.",
+        None,
+    );
+    out.push(String::new());
 }
 
 fn render_aaa_note(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
