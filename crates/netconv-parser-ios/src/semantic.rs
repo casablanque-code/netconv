@@ -1409,13 +1409,23 @@ impl SemanticParser {
         // ip nat inside source list <acl> {pool <name> | interface <if>} [overload]
         // ip nat inside source static <local> <global>
         // ip nat pool <name> <start> <end> prefix-length <n>
+        //
+        // Индексы токенов: [0]=ip [1]=nat [2]=inside/outside/pool [3]=source/...
+        // Баг (доисторический, унаследован при рефакторинге пула выше):
+        // match на tokens.get(2) ожидал "source" на позиции 2, но в
+        // "ip nat inside source list ..." слово "source" стоит на позиции 3
+        // (позиция 2 занята "inside"/"outside"). match никогда не матчился,
+        // self.handle_nat молча проваливался в _ => add_unknown для КАЖДОЙ
+        // NAT-команды inside source — то есть cfg.nat был ВСЕГДА пуст для
+        // самого частого случая, обнаружено через падение интеграционных
+        // тестов (vrp_nat_pool_*, parser_marks_undefined_pool_reference_as_manual).
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
 
-        match tokens.get(2) {
+        match tokens.get(3) {
             Some(&"source") => {
-                match tokens.get(3) {
+                match tokens.get(4) {
                     Some(&"list") => {
-                        let acl = tokens.get(4).map(|s| s.to_string());
+                        let acl = tokens.get(5).map(|s| s.to_string());
                         let overload = tokens.contains(&"overload");
 
                         let (pool, iface_overload) = if let Some(pool_pos) = tokens.iter().position(|&t| t == "pool") {
@@ -1472,8 +1482,8 @@ impl SemanticParser {
                         });
                     }
                     Some(&"static") => {
-                        let local  = tokens.get(4).and_then(|s| s.parse().ok());
-                        let global = tokens.get(5).and_then(|s| s.parse().ok());
+                        let local  = tokens.get(5).and_then(|s| s.parse().ok());
+                        let global = tokens.get(6).and_then(|s| s.parse().ok());
                         if let (Some(l), Some(g)) = (local, global) {
                             cfg.nat.push(NatRule {
                                 rule_type: NatType::Static,
@@ -1497,7 +1507,7 @@ impl SemanticParser {
             }
             // "ip nat pool NAME ..." — уже собрано первым проходом в collect_nat_pools.
             // Здесь просто тихо принимаем, чтобы не помечать как unknown.
-            Some(&"pool") => {}
+            _ if tokens.get(2) == Some(&"pool") => {}
             _ => {
                 report.add_unknown(node.full(), "ip nat");
             }
