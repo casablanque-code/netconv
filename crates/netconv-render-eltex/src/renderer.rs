@@ -5,6 +5,7 @@ use crate::system::render_system;
 use crate::iface::render_interfaces;
 use crate::routing::render_routing;
 use crate::security::render_security_zones;
+use crate::acl::render_acls;
 
 pub struct EltexRenderer;
 
@@ -44,6 +45,9 @@ impl ConfigRenderer for EltexRenderer {
 
         // Interfaces
         render_interfaces(config, &mut out, report);
+
+        // ACL — тела списков, на которые ссылаются ip access-group на интерфейсах
+        render_acls(config, &mut out, report);
 
         // Routing: static, OSPF, BGP
         render_routing(config, &mut out, report);
