@@ -1,0 +1,16 @@
+[package]
+name = "netconv-integration-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+# Этот крейт существует только ради интеграционных тестов в tests/*.rs —
+# собственного кода библиотеки нет.
+path = "src/lib.rs"
+
+[dev-dependencies]
+netconv-core = { path = "../crates/netconv-core" }
+netconv-parser-ios = { path = "../crates/netconv-parser-ios" }
+netconv-render-vrp = { path = "../crates/netconv-render-vrp" }
+netconv-render-eltex = { path = "../crates/netconv-render-eltex" }
