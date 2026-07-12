@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 use netconv_parser_ios::IosParser;
-use netconv_render_vrp::VrpRenderer;
+use netconv_render_vrp::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
 use netconv_render_eltex::EltexRenderer;
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +58,25 @@ pub fn convert_config(
     })
 }
 
+/// То же самое, но с профилем устройства ("l2" | "l3" | "").
+/// Для пары ios->vrp профиль реально фильтрует домен через
+/// VrpL2Renderer/VrpL3Renderer — VLAN/switchport не попадают в L3-вывод
+/// и наоборот. Для остальных пар (пока только ios->eltex) профиль ни
+/// на что не влияет — Eltex ещё не разделён на l2/l3 (см. roadmap),
+/// используется прежний EltexRenderer.
+#[wasm_bindgen]
+pub fn convert_config_profiled(
+    source_config: &str,
+    source_vendor: &str,
+    target_vendor: &str,
+    profile: &str,
+) -> String {
+    let result = run_conversion_profiled(source_config, source_vendor, target_vendor, profile);
+    serde_json::to_string(&result).unwrap_or_else(|e| {
+        format!("{{\"success\":false,\"error\":\"{}\"}}", e)
+    })
+}
+
 fn run_conversion(input: &str, source: &str, target: &str) -> WasmConvertResult {
     match (source, target) {
         ("ios", "vrp") | ("cisco", "huawei") => {
@@ -72,6 +91,16 @@ fn run_conversion(input: &str, source: &str, target: &str) -> WasmConvertResult 
             report: empty_report(source, target),
             error: Some(format!("Pair {}->{} not yet supported", source, target)),
         }
+    }
+}
+
+fn run_conversion_profiled(input: &str, source: &str, target: &str, profile: &str) -> WasmConvertResult {
+    match (source, target, profile) {
+        ("ios", "vrp", "l2") => do_convert(&IosParser, &VrpL2Renderer, input, source, target),
+        ("ios", "vrp", "l3") => do_convert(&IosParser, &VrpL3Renderer, input, source, target),
+        // Неизвестный/пустой профиль или пара без l2/l3-разделения (eltex
+        // пока не разделён) — прежнее нефильтрующее поведение.
+        _ => run_conversion(input, source, target),
     }
 }
 
