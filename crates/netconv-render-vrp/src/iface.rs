@@ -1,13 +1,14 @@
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
+use crate::scope::RenderScope;
 
-pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
     for iface in &cfg.interfaces {
-        render_interface(iface, out, report);
+        render_interface(iface, out, report, scope);
     }
 }
 
-fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
     let vrp_name = ios_to_vrp_ifname(&iface.name);
 
     out.push("#".to_string());
@@ -83,54 +84,61 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
         }
     }
 
-    // DHCP relay (helper-address → dhcp-snooping или relay)
-    for helper in &iface.helper_addresses {
-        // Cisco: ip helper-address 10.0.0.254
-        // VRP:   dhcp relay server-ip 10.0.0.254  (в контексте интерфейса)
-        out.push(format!(" dhcp relay server-ip {}", helper));
-        report.add_approximate(
-            "interface.helper",
-            &format!("ip helper-address {} on {}", helper, iface.name.original),
-            &format!("dhcp relay server-ip {}", helper),
-            "На VRP также требуется 'dhcp enable' глобально и 'dhcp select relay' на интерфейсе",
-        );
+    // DHCP relay (helper-address → dhcp-snooping или relay) — требует
+    // маршрутизируемого интерфейса, рендерим только в L3-scope
+    if scope.wants_l3() {
+        for helper in &iface.helper_addresses {
+            // Cisco: ip helper-address 10.0.0.254
+            // VRP:   dhcp relay server-ip 10.0.0.254  (в контексте интерфейса)
+            out.push(format!(" dhcp relay server-ip {}", helper));
+            report.add_approximate(
+                "interface.helper",
+                &format!("ip helper-address {} on {}", helper, iface.name.original),
+                &format!("dhcp relay server-ip {}", helper),
+                "На VRP также требуется 'dhcp enable' глобально и 'dhcp select relay' на интерфейсе",
+            );
+        }
     }
 
     // L2 / switchport
-    if let Some(l2) = &iface.l2 {
-        render_l2(l2, out, report, &src_block);
+    if scope.wants_l2() {
+        if let Some(l2) = &iface.l2 {
+            render_l2(l2, out, report, &src_block);
+        }
     }
 
     // ACL in/out
     // Cisco: ip access-group NAME in
     // VRP:   traffic-filter inbound acl name NAME
-    if let Some(acl_in) = &iface.acl_in {
-        out.push(format!(" traffic-filter inbound acl name {}", acl_in));
-        report.add_approximate(
-            "interface.acl",
-            &format!("ip access-group {} in", acl_in),
-            &format!("traffic-filter inbound acl name {}", acl_in),
-            "VRP использует traffic-filter вместо access-group; проверь совместимость нумерации ACL",
-        );
-    }
-    if let Some(acl_out) = &iface.acl_out {
-        out.push(format!(" traffic-filter outbound acl name {}", acl_out));
-        report.add_approximate(
-            "interface.acl",
-            &format!("ip access-group {} out", acl_out),
-            &format!("traffic-filter outbound acl name {}", acl_out),
-            "VRP использует traffic-filter вместо access-group",
-        );
-    }
+    if scope.wants_l3() {
+        if let Some(acl_in) = &iface.acl_in {
+            out.push(format!(" traffic-filter inbound acl name {}", acl_in));
+            report.add_approximate(
+                "interface.acl",
+                &format!("ip access-group {} in", acl_in),
+                &format!("traffic-filter inbound acl name {}", acl_in),
+                "VRP использует traffic-filter вместо access-group; проверь совместимость нумерации ACL",
+            );
+        }
+        if let Some(acl_out) = &iface.acl_out {
+            out.push(format!(" traffic-filter outbound acl name {}", acl_out));
+            report.add_approximate(
+                "interface.acl",
+                &format!("ip access-group {} out", acl_out),
+                &format!("traffic-filter outbound acl name {}", acl_out),
+                "VRP использует traffic-filter вместо access-group",
+            );
+        }
 
-    // NAT direction — только маркер, сам NAT рендерится отдельно
-    if let Some(nat_dir) = &iface.nat_direction {
-        match nat_dir {
-            NatDirection::Inside => {
-                out.push(" # nat: inside (настраивается через 'nat outbound' на этом интерфейсе)".to_string());
-            }
-            NatDirection::Outside => {
-                out.push(" # nat: outside".to_string());
+        // NAT direction — только маркер, сам NAT рендерится отдельно
+        if let Some(nat_dir) = &iface.nat_direction {
+            match nat_dir {
+                NatDirection::Inside => {
+                    out.push(" # nat: inside (настраивается через 'nat outbound' на этом интерфейсе)".to_string());
+                }
+                NatDirection::Outside => {
+                    out.push(" # nat: outside".to_string());
+                }
             }
         }
     }
@@ -138,31 +146,33 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     // Voice VLAN
     // Cisco: switchport voice vlan 11
     // VRP:   voice-vlan 11 enable
-    if let Some(vv) = iface.voice_vlan {
-        let is_trunk = iface.l2.as_ref()
-            .map(|l| l.mode == L2Mode::Trunk)
-            .unwrap_or(false);
+    if scope.wants_l2() {
+        if let Some(vv) = iface.voice_vlan {
+            let is_trunk = iface.l2.as_ref()
+                .map(|l| l.mode == L2Mode::Trunk)
+                .unwrap_or(false);
 
-        if is_trunk {
-            // Voice VLAN на trunk порту — нестандартная конфигурация
-            out.push(format!(" # ⚠ WARN: voice-vlan {} on trunk port — verify behavior on VRP.", vv));
-            out.push(format!(" #   In Cisco 'switchport voice vlan' on trunk is non-standard."));
-            out.push(format!(" #   On VRP voice-vlan on trunk may behave differently — review manually."));
-            out.push(format!(" voice-vlan {} enable", vv));
-            report.add_approximate(
-                "interface.voice_vlan.trunk",
-                &format!("switchport voice vlan {} (on trunk)", vv),
-                &format!("voice-vlan {} enable (on trunk — verify)", vv),
-                "WARN: voice VLAN on trunk port. Non-standard config — verify behavior on VRP.",
-            );
-        } else {
-            out.push(format!(" voice-vlan {} enable", vv));
-            report.add_approximate(
-                "interface.voice_vlan",
-                &format!("switchport voice vlan {}", vv),
-                &format!("voice-vlan {} enable", vv),
-                "VRP: voice-vlan X enable. Также требуется глобально: voice-vlan enable",
-            );
+            if is_trunk {
+                // Voice VLAN на trunk порту — нестандартная конфигурация
+                out.push(format!(" # ⚠ WARN: voice-vlan {} on trunk port — verify behavior on VRP.", vv));
+                out.push(format!(" #   In Cisco 'switchport voice vlan' on trunk is non-standard."));
+                out.push(format!(" #   On VRP voice-vlan on trunk may behave differently — review manually."));
+                out.push(format!(" voice-vlan {} enable", vv));
+                report.add_approximate(
+                    "interface.voice_vlan.trunk",
+                    &format!("switchport voice vlan {} (on trunk)", vv),
+                    &format!("voice-vlan {} enable (on trunk — verify)", vv),
+                    "WARN: voice VLAN on trunk port. Non-standard config — verify behavior on VRP.",
+                );
+            } else {
+                out.push(format!(" voice-vlan {} enable", vv));
+                report.add_approximate(
+                    "interface.voice_vlan",
+                    &format!("switchport voice vlan {}", vv),
+                    &format!("voice-vlan {} enable", vv),
+                    "VRP: voice-vlan X enable. Также требуется глобально: voice-vlan enable",
+                );
+            }
         }
     }
 
@@ -170,102 +180,108 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     // Cisco: storm-control broadcast level 5.00
     // VRP:   storm-control broadcast min-rate 64 max-rate <N>
     //        (VRP использует kbps, Cisco — процент от bandwidth)
-    if let Some(sc) = &iface.storm_control {
-        if let Some(level) = sc.broadcast_level {
-            // ASSUMPTION: Cisco "level X" интерпретируется как X% от bandwidth.
-            // На некоторых платформах Cisco level — это pps или kbps, не процент.
-            // Проверь оригинальную документацию платформы перед применением.
-            out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
-            out.push(format!(" storm-control broadcast percent {}", level));
-            report.add_approximate(
-                "interface.storm_control",
-                &format!("storm-control broadcast level {}", level),
-                &format!("storm-control broadcast percent {}", level),
-                &format!(
-                    "ASSUMPTION: Cisco level {} → VRP percent {}.                      Единицы измерения могут отличаться в зависимости от платформы Cisco.                      Также доступен kbps режим: storm-control broadcast kbps <N>",
-                    level, level
-                ),
-            );
-        }
-        if let Some(level) = sc.multicast_level {
-            out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
-            out.push(format!(" storm-control multicast percent {}", level));
-            report.add_approximate(
-                "interface.storm_control",
-                &format!("storm-control multicast level {}", level),
-                &format!("storm-control multicast percent {}", level),
-                &format!(
-                    "ASSUMPTION: Cisco level {} → VRP percent {}. Проверь единицы измерения.",
-                    level, level
-                ),
-            );
+    if scope.wants_l2() {
+        if let Some(sc) = &iface.storm_control {
+            if let Some(level) = sc.broadcast_level {
+                // ASSUMPTION: Cisco "level X" интерпретируется как X% от bandwidth.
+                // На некоторых платформах Cisco level — это pps или kbps, не процент.
+                // Проверь оригинальную документацию платформы перед применением.
+                out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
+                out.push(format!(" storm-control broadcast percent {}", level));
+                report.add_approximate(
+                    "interface.storm_control",
+                    &format!("storm-control broadcast level {}", level),
+                    &format!("storm-control broadcast percent {}", level),
+                    &format!(
+                        "ASSUMPTION: Cisco level {} → VRP percent {}.                      Единицы измерения могут отличаться в зависимости от платформы Cisco.                      Также доступен kbps режим: storm-control broadcast kbps <N>",
+                        level, level
+                    ),
+                );
+            }
+            if let Some(level) = sc.multicast_level {
+                out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
+                out.push(format!(" storm-control multicast percent {}", level));
+                report.add_approximate(
+                    "interface.storm_control",
+                    &format!("storm-control multicast level {}", level),
+                    &format!("storm-control multicast percent {}", level),
+                    &format!(
+                        "ASSUMPTION: Cisco level {} → VRP percent {}. Проверь единицы измерения.",
+                        level, level
+                    ),
+                );
+            }
         }
     }
 
     // STP per-interface
-    if iface.stp.portfast {
-        // Cisco: spanning-tree portfast
-        // VRP:   stp edged-port enable
-        out.push(" stp edged-port enable".to_string());
-        report.add_approximate(
-            "stp.portfast",
-            "spanning-tree portfast",
-            "stp edged-port enable",
-            "VRP: stp edged-port enable — аналог portfast.              Автоматически активирует BPDU protection если включён stp bpdu-protection глобально.",
-        );
-    }
-
-    if iface.stp.bpdufilter {
-        let is_trunk = iface.l2.as_ref()
-            .map(|l| l.mode == L2Mode::Trunk)
-            .unwrap_or(false);
-
-        if is_trunk {
-            // Context-aware: trunk порт — НЕ применяем bpdu-filter автоматически
-            // это uplink/downlink к другому свитчу, bpdu-filter здесь опасен
-            out.push(" # ⚠ RISK: bpdu-filter NOT applied — trunk port detected.".to_string());
-            out.push(" #   Applying bpdu-filter on trunk/uplink ports can cause STP loops.".to_string());
-            out.push(" #   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
-            out.push(" #   If this port connects to an end device (not a switch), uncomment:".to_string());
-            out.push(" #   stp bpdu-filter enable".to_string());
-            report.add_manual(
-                "stp.bpdufilter",
-                "spanning-tree bpdufilter enable (on trunk port)",
-                "RISK: trunk port detected — bpdu-filter NOT auto-applied.                  On uplink/trunk ports bpdu-filter can cause STP loops.",
-                Some("Review port role. Apply 'stp bpdu-filter enable' only if this is truly an edge port."),
-            );
-        } else {
-            // Access/edge порт — применяем с предупреждением
-            out.push(" # ⚠ NOTE: BPDU filter disables STP on this port.".to_string());
-            out.push(" #   Safe only if this is a trusted edge port (end device, not a switch).".to_string());
-            out.push(" stp bpdu-filter enable".to_string());
+    if scope.wants_l2() {
+        if iface.stp.portfast {
+            // Cisco: spanning-tree portfast
+            // VRP:   stp edged-port enable
+            out.push(" stp edged-port enable".to_string());
             report.add_approximate(
-                "stp.bpdufilter",
-                "spanning-tree bpdufilter enable",
-                "stp bpdu-filter enable",
-                "Access port: bpdu-filter applied.                  Verify this port connects to an end device, not a switch.",
+                "stp.portfast",
+                "spanning-tree portfast",
+                "stp edged-port enable",
+                "VRP: stp edged-port enable — аналог portfast.              Автоматически активирует BPDU protection если включён stp bpdu-protection глобально.",
+            );
+        }
+
+        if iface.stp.bpdufilter {
+            let is_trunk = iface.l2.as_ref()
+                .map(|l| l.mode == L2Mode::Trunk)
+                .unwrap_or(false);
+
+            if is_trunk {
+                // Context-aware: trunk порт — НЕ применяем bpdu-filter автоматически
+                // это uplink/downlink к другому свитчу, bpdu-filter здесь опасен
+                out.push(" # ⚠ RISK: bpdu-filter NOT applied — trunk port detected.".to_string());
+                out.push(" #   Applying bpdu-filter on trunk/uplink ports can cause STP loops.".to_string());
+                out.push(" #   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
+                out.push(" #   If this port connects to an end device (not a switch), uncomment:".to_string());
+                out.push(" #   stp bpdu-filter enable".to_string());
+                report.add_manual(
+                    "stp.bpdufilter",
+                    "spanning-tree bpdufilter enable (on trunk port)",
+                    "RISK: trunk port detected — bpdu-filter NOT auto-applied.                  On uplink/trunk ports bpdu-filter can cause STP loops.",
+                    Some("Review port role. Apply 'stp bpdu-filter enable' only if this is truly an edge port."),
+                );
+            } else {
+                // Access/edge порт — применяем с предупреждением
+                out.push(" # ⚠ NOTE: BPDU filter disables STP on this port.".to_string());
+                out.push(" #   Safe only if this is a trusted edge port (end device, not a switch).".to_string());
+                out.push(" stp bpdu-filter enable".to_string());
+                report.add_approximate(
+                    "stp.bpdufilter",
+                    "spanning-tree bpdufilter enable",
+                    "stp bpdu-filter enable",
+                    "Access port: bpdu-filter applied.                  Verify this port connects to an end device, not a switch.",
+                );
+            }
+        }
+
+        if iface.stp.bpduguard {
+            out.push(" stp bpdu-protection enable".to_string());
+            report.add_approximate(
+                "stp.bpduguard",
+                "spanning-tree bpduguard enable",
+                "stp bpdu-protection enable",
+                "VRP: stp bpdu-protection enable на интерфейсе",
             );
         }
     }
 
-    if iface.stp.bpduguard {
-        out.push(" stp bpdu-protection enable".to_string());
-        report.add_approximate(
-            "stp.bpduguard",
-            "spanning-tree bpduguard enable",
-            "stp bpdu-protection enable",
-            "VRP: stp bpdu-protection enable на интерфейсе",
-        );
-    }
-
     // OSPF на интерфейсе
-    if let Some(ospf) = &iface.ospf {
-        render_interface_ospf(ospf, out, report, &src_block);
-    }
+    if scope.wants_l3() {
+        if let Some(ospf) = &iface.ospf {
+            render_interface_ospf(ospf, out, report, &src_block);
+        }
 
-    // HSRP → VRRP (Approximate)
-    for hsrp in &iface.hsrp {
-        render_hsrp_as_vrrp(hsrp, out, report, &src_block);
+        // HSRP → VRRP (Approximate)
+        for hsrp in &iface.hsrp {
+            render_hsrp_as_vrrp(hsrp, out, report, &src_block);
+        }
     }
 
     out.push(String::new());

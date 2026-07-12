@@ -5,5 +5,6 @@ pub mod acl;
 pub mod nat;
 pub mod system;
 pub mod vlan;
+mod scope;
 
-pub use renderer::VrpRenderer;
+pub use renderer::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
