@@ -1,5 +1,6 @@
 use clap::Parser;
-use netconv_core::traits::convert;
+use netconv_core::profile::DeviceProfile;
+use netconv_core::traits::{convert, convert_with_profile};
 use netconv_core::report::Severity;
 use netconv_parser_ios::IosParser;
 use netconv_render_vrp::VrpRenderer;
@@ -38,6 +39,12 @@ struct Args {
     /// Вывести репорт в JSON
     #[arg(long, default_value_t = false)]
     json: bool,
+
+    /// Профиль устройства: l2 (коммутатор) или l3 (маршрутизатор/firewall).
+    /// Если не указан — сверка домена не выполняется (устаревшее поведение,
+    /// будет обязательным после разделения рендереров на l2/l3).
+    #[arg(long)]
+    profile: Option<String>,
 }
 
 fn main() {
@@ -52,15 +59,24 @@ fn main() {
         }
     };
 
+    // Профиль устройства (опционально — см. комментарий у поля Args::profile)
+    let profile = match args.profile.as_deref() {
+        Some("l2") => Some(DeviceProfile::L2Switch),
+        Some("l3") => Some(DeviceProfile::L3Router),
+        Some(other) => {
+            eprintln!("Неизвестный профиль '{}'. Допустимо: l2, l3", other);
+            std::process::exit(1);
+        }
+        None => None,
+    };
+
     // Конвертируем
-    let result = match (args.from.as_str(), args.to.as_str()) {
-        ("ios", "vrp") => {
-            convert(&IosParser, &VrpRenderer, &input)
-        }
-        ("ios", "eltex") => {
-            convert(&IosParser, &EltexRenderer, &input)
-        }
-        (src, tgt) => {
+    let result = match (args.from.as_str(), args.to.as_str(), profile) {
+        ("ios", "vrp", Some(p)) => convert_with_profile(&IosParser, &VrpRenderer, &input, p),
+        ("ios", "vrp", None) => convert(&IosParser, &VrpRenderer, &input),
+        ("ios", "eltex", Some(p)) => convert_with_profile(&IosParser, &EltexRenderer, &input, p),
+        ("ios", "eltex", None) => convert(&IosParser, &EltexRenderer, &input),
+        (src, tgt, _) => {
             eprintln!("Пара {}->{} пока не поддерживается.", src, tgt);
             eprintln!("Доступно: --from ios --to vrp | --from ios --to eltex");
             std::process::exit(1);
@@ -101,6 +117,19 @@ fn main() {
     eprintln!(" ? Нераспознано:         {}", r.summary.unknown);
     eprintln!(" Coverage:               {:.0}%", r.summary.coverage_pct());
     eprintln!("─────────────────────────────────────────");
+
+    if let Some(p) = profile {
+        if !r.domain_mismatches.is_empty() {
+            eprintln!(" ⚠ Профиль {}: найдены команды другого домена", p.label());
+            eprintln!("─────────────────────────────────────────");
+            for m in &r.domain_mismatches {
+                eprintln!(" [{}] {}", m.domain, m.detail);
+            }
+            eprintln!(" Рендерер пока не фильтрует по профилю — эти команды всё ещё");
+            eprintln!(" присутствуют в выходном конфиге (см. roadmap: разделение l2/l3).");
+            eprintln!("─────────────────────────────────────────");
+        }
+    }
 
     if args.json {
         // Сериализуем репорт в JSON
