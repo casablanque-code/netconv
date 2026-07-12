@@ -3,7 +3,7 @@ use netconv_core::profile::DeviceProfile;
 use netconv_core::traits::{convert, convert_with_profile};
 use netconv_core::report::Severity;
 use netconv_parser_ios::IosParser;
-use netconv_render_vrp::VrpRenderer;
+use netconv_render_vrp::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
 use netconv_render_eltex::EltexRenderer;
 use std::path::PathBuf;
 
@@ -72,8 +72,17 @@ fn main() {
 
     // Конвертируем
     let result = match (args.from.as_str(), args.to.as_str(), profile) {
-        ("ios", "vrp", Some(p)) => convert_with_profile(&IosParser, &VrpRenderer, &input, p),
+        // ios -> vrp с профилем: рендерер реально фильтрует по домену
+        // (первая "безупречная" пара из roadmap)
+        ("ios", "vrp", Some(DeviceProfile::L2Switch)) => {
+            convert_with_profile(&IosParser, &VrpL2Renderer, &input, DeviceProfile::L2Switch)
+        }
+        ("ios", "vrp", Some(DeviceProfile::L3Router)) => {
+            convert_with_profile(&IosParser, &VrpL3Renderer, &input, DeviceProfile::L3Router)
+        }
         ("ios", "vrp", None) => convert(&IosParser, &VrpRenderer, &input),
+        // ios -> eltex: пока не разделён на l2/l3, --profile здесь только
+        // предупреждает через domain_mismatches, не фильтрует вывод
         ("ios", "eltex", Some(p)) => convert_with_profile(&IosParser, &EltexRenderer, &input, p),
         ("ios", "eltex", None) => convert(&IosParser, &EltexRenderer, &input),
         (src, tgt, _) => {
@@ -125,8 +134,13 @@ fn main() {
             for m in &r.domain_mismatches {
                 eprintln!(" [{}] {}", m.domain, m.detail);
             }
-            eprintln!(" Рендерер пока не фильтрует по профилю — эти команды всё ещё");
-            eprintln!(" присутствуют в выходном конфиге (см. roadmap: разделение l2/l3).");
+            if args.to == "vrp" {
+                eprintln!(" Эти команды НЕ попали в выходной конфиг — рендерер VRP уже");
+                eprintln!(" фильтрует по профилю. Оригинал остался только в источнике.");
+            } else {
+                eprintln!(" Рендерер {} пока не фильтрует по профилю — эти команды всё ещё", args.to);
+                eprintln!(" присутствуют в выходном конфиге (см. roadmap: разделение l2/l3).");
+            }
             eprintln!("─────────────────────────────────────────");
         }
     }
