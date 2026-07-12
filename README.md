@@ -47,6 +47,24 @@ netconv never silently drops commands. Everything unrecognised is preserved as a
 
 ---
 
+## L2 and L3 are never mixed
+
+A switch is not a router, and no one replaces one with the other. netconv treats "convert a switch config" and "convert a router config" as two different jobs, not two branches of the same function:
+
+- **L2 profile** — VLANs, access/trunk ports, STP, voice VLAN, storm-control. Targets a switch platform (e.g. Huawei S-series).
+- **L3 profile** — IP addressing, static/OSPF/BGP routing, ACLs, NAT, HSRP/VRRP. Targets a router platform (e.g. Huawei AR/NE).
+
+You pick the profile explicitly (CLI `--profile l2|l3`, web UI tabs) — netconv never guesses it from the config's contents. If the source config contains commands from the other domain (OSPF found while converting under `--profile l2`, for example), netconv reports it explicitly instead of either rendering nonsense or quietly dropping it.
+
+```bash
+netconv --input switch.cfg  --to vrp --profile l2   # VLANs/switchport only
+netconv --input router.cfg  --to vrp --profile l3   # routing/ACL/NAT only
+```
+
+This is implemented per-vendor-pair, not as a blanket rule — see the coverage table below for which pairs already enforce it (currently `ios → vrp`; `ios → eltex` doesn't filter yet).
+
+---
+
 ## Quickstart
 
 ### Option 1 — Browser (no install)
@@ -82,6 +100,10 @@ cargo build --release -p netconv
 # Convert (stdout)
 ./target/release/netconv --input router.cfg --from ios --to vrp
 
+# Convert with explicit device profile — filters L2 vs L3 domain (see below)
+./target/release/netconv --input switch.cfg --to vrp --profile l2
+./target/release/netconv --input router.cfg --to vrp --profile l3
+
 # Write to file
 ./target/release/netconv --input router.cfg --to vrp --output router_vrp.cfg
 
@@ -110,12 +132,14 @@ Use netconv as a network config linter in your pipeline:
 
 ## Supported conversions
 
-| Source | Target | Status |
-|--------|--------|--------|
-| Cisco IOS | Huawei VRP | ✓ Implemented |
-| Cisco IOS | Eltex ESR | 🚧 In progress |
-| Cisco IOS | VyOS | 🚧 Planned |
-| Cisco ASA | Huawei VRP | 🚧 Planned |
+| Source | Target | L2 profile | L3 profile |
+|--------|--------|------------|------------|
+| Cisco IOS | Huawei VRP | ✓ Implemented (S-series) | ✓ Implemented (AR/NE) |
+| Cisco IOS | Eltex ESR | 🚧 Planned (MES) | 🚧 In progress (not domain-filtered yet) |
+| Cisco IOS | VyOS | 🚧 Planned | 🚧 Planned |
+| Cisco ASA | — | n/a (ASA has no L2 role) | 🚧 Planned |
+
+`--profile` without a value (legacy `VrpRenderer`, or any `--to eltex` call) still renders everything unfiltered — that's the "useless L2↔L3 converter" this project is actively moving away from, kept only for backward compatibility until every pair is split.
 
 ---
 
@@ -195,35 +219,38 @@ Use netconv as a network config linter in your pipeline:
 
 ```
 crates/
-  netconv-core/        # Vendor-neutral IR, ConfigParser/ConfigRenderer traits, ConversionReport
+  netconv-core/        # Vendor-neutral IR, ConfigParser/ConfigRenderer traits, ConversionReport,
+                        #   profile.rs — DeviceProfile (L2Switch/L3Router) + domain mismatch detection
   netconv-parser-ios/  # Cisco IOS parser: pass1 structural tree, pass2 semantic analysis
-  netconv-render-vrp/  # Huawei VRP renderer with per-item explanations
-  netconv-wasm/        # WASM bindings (wasm-bindgen)
-cli/                   # CLI binary (clap)
+  netconv-render-vrp/  # Huawei VRP renderer — VrpL2Renderer / VrpL3Renderer (domain-filtered) +
+                        #   legacy VrpRenderer (unfiltered, kept for backward compat)
+  netconv-render-eltex/# Eltex ESR renderer — not yet split into l2/l3
+  netconv-wasm/        # WASM bindings (wasm-bindgen): convert_config (legacy) + convert_config_profiled
+cli/                   # CLI binary (clap) — --profile l2|l3
 web/
-  index.html           # Single-file UI: WASM auto-load, demo fallback
-  worker.js            # Cloudflare Worker
+  index.html           # Single-file UI: L2/L3 tabs, WASM auto-load, demo fallback
+  worker.js             # Cloudflare Worker
 ```
 
 ### Adding a new target vendor
 
-One new crate, implement one trait. Parser and IR are untouched.
+One new crate, implement `ConfigRenderer`. Parser and IR are untouched. If the platform has distinct switch and router product lines (most do — that's the point), split the renderer into two structs from the start rather than adding a "convert everything" renderer that has to be un-mixed later:
 
 ```rust
-impl ConfigRenderer for EltexRenderer {
+pub struct FooL2Renderer; // switch: VLANs, switchport, STP
+pub struct FooL3Renderer; // router: addressing, routing, ACL, NAT
+
+impl ConfigRenderer for FooL3Renderer {
     fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, _> {
-        // render IR to Eltex ESR syntax
+        // render only L3-relevant IR fields to Foo router syntax
     }
-    fn vendor_name(&self) -> &str { "Eltex ESR" }
+    fn vendor_name(&self) -> &str { "Foo Router" }
 }
 ```
 
-Register in `netconv-wasm/src/lib.rs`:
-```rust
-("ios", "eltex") => convert(&IosParser, &EltexRenderer, input),
-```
+Register both in `netconv-wasm/src/lib.rs::run_conversion_profiled` and in `cli/src/main.rs`'s profile match arms. Add to the web UI's `dst-vendor` select, gated per-profile the same way `updateVendorOptionsForProfile()` already gates Eltex for L2.
 
-Add to UI select — done.
+See `crates/netconv-render-vrp/src/scope.rs` for the pattern used to share code between the two renderers where a vendor's switch and router syntax overlap (e.g. common system settings).
 
 ---
 
