@@ -2,7 +2,7 @@ use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
 use crate::scope::RenderScope;
 
-pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
+pub(crate) fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
     for iface in &cfg.interfaces {
         render_interface(iface, out, report, scope);
     }
