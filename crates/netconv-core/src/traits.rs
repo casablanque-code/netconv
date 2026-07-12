@@ -1,4 +1,5 @@
 use crate::ir::NetworkConfig;
+use crate::profile::{detect_domain_mismatches, DeviceProfile};
 use crate::report::ConversionReport;
 
 /// Парсер: текст конфига → IR + частичный репорт (что не распознано)
@@ -35,6 +36,34 @@ where
 {
     let (ir, mut report) = parser.parse(input)
         .map_err(|e| ConvertError::ParseError(format!("{:?}", e)))?;
+
+    let output = renderer.render(&ir, &mut report)
+        .map_err(|e| ConvertError::RenderError(format!("{:?}", e)))?;
+
+    Ok(ConversionOutput { config_text: output, report })
+}
+
+/// Тот же пайплайн что и `convert`, но дополнительно сверяет разобранный
+/// IR с выбранным профилем устройства (L2/L3) и кладёт найденные
+/// несоответствия домена в `report.domain_mismatches` — до того как
+/// рендерер успеет молча отрисовать или тихо отбросить чужой домен.
+///
+/// Рендерер на этом этапе ещё не фильтрует IR по профилю — это следующий
+/// шаг (разделение render-крейтов на l2/l3). Здесь только диагностика.
+pub fn convert_with_profile<P, R>(
+    parser: &P,
+    renderer: &R,
+    input: &str,
+    profile: DeviceProfile,
+) -> Result<ConversionOutput, ConvertError>
+where
+    P: ConfigParser,
+    R: ConfigRenderer,
+{
+    let (ir, mut report) = parser.parse(input)
+        .map_err(|e| ConvertError::ParseError(format!("{:?}", e)))?;
+
+    report.domain_mismatches = detect_domain_mismatches(&ir, profile);
 
     let output = renderer.render(&ir, &mut report)
         .map_err(|e| ConvertError::RenderError(format!("{:?}", e)))?;

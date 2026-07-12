@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::profile::DomainMismatch;
+
 // ---------------------------------------------------------------------------
 // Risk Score — итоговая оценка рискованности конвертации
 // ---------------------------------------------------------------------------
@@ -72,6 +74,10 @@ pub struct ConversionReport {
     pub summary: ReportSummary,
     pub items: Vec<ReportItem>,
     pub risk: RiskScore,
+    /// Сущности чужого домена (L2 в L3-профиле и наоборот), найденные
+    /// через profile::detect_domain_mismatches. Пусто, если профиль не
+    /// был указан (см. traits::convert_with_profile) или конфликтов нет.
+    pub domain_mismatches: Vec<DomainMismatch>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
