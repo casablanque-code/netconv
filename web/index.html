@@ -534,6 +534,10 @@ hljs.registerLanguage('netconfig', function(hljs) {
   </div>
   <div style="display:flex;align-items:center;gap:12px;">
     <span id="wasm-notice" class="wasm-notice">WASM не загружен — demo mode</span>
+    <div class="profile-tabs" style="display:flex;gap:2px;align-items:center;">
+      <button class="filter-btn" id="tab-l2" onclick="setProfile('l2', this)">L2 (switching)</button>
+      <button class="filter-btn active" id="tab-l3" onclick="setProfile('l3', this)">L3 (routing)</button>
+    </div>
     <div class="vendor-selects">
       <select id="src-vendor">
         <option value="ios">Cisco IOS</option>
@@ -542,7 +546,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
       </select>
       <span class="arrow-label">→</span>
       <select id="dst-vendor">
-        <option value="vrp">Huawei VRP</option>
+        <option value="vrp">Huawei VRP (AR/NE, router)</option>
         <option value="eltex">Eltex ESR</option>
         <option value="vyos" disabled>VyOS (скоро)</option>
       </select>
@@ -628,9 +632,52 @@ hljs.registerLanguage('netconfig', function(hljs) {
 let allItems = [];
 let currentFilter = 'all';
 let wasmLoaded = false;
+let currentProfile = 'l3'; // 'l2' | 'l3' — по умолчанию L3, т.к. пример конфига роутерный
 
-// ── convert_config: WASM если загружен, иначе demo ──
-function convert_config(input, src, dst) {
+// ── профиль устройства: L2 (switching) / L3 (routing) ──
+// Разделение отражает реальную роль железа: свитч меняют на свитч,
+// роутер на роутер — L2 и L3 никогда не смешиваются в одном выводе.
+// Полностью фильтрует вывод только для пары ios->vrp (VrpL2Renderer /
+// VrpL3Renderer); для ios->eltex профиль пока не фильтрует (Eltex ещё
+// не разделён на l2/l3 — см. roadmap), но UI уже не даёт выбрать
+// нереализованную комбинацию.
+function setProfile(profile, btn) {
+  currentProfile = profile;
+  document.querySelectorAll('.profile-tabs .filter-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  updateVendorOptionsForProfile();
+}
+
+function updateVendorOptionsForProfile() {
+  const dst = document.getElementById('dst-vendor');
+  const vrpOpt = dst.querySelector('option[value="vrp"]');
+  const eltexOpt = dst.querySelector('option[value="eltex"]');
+
+  if (currentProfile === 'l2') {
+    vrpOpt.textContent = 'Huawei VRP (S-series, switch)';
+    // Eltex L2 (MES) ещё не реализован — не даём выбрать нереализованную
+    // пару (см. фикс fba6aa8: "vendor selects offered pairs that aren't
+    // implemented anywhere").
+    eltexOpt.disabled = true;
+    eltexOpt.textContent = 'Eltex MES (L2 — скоро)';
+    if (dst.value === 'eltex') dst.value = 'vrp';
+  } else {
+    vrpOpt.textContent = 'Huawei VRP (AR/NE, router)';
+    eltexOpt.disabled = false;
+    eltexOpt.textContent = 'Eltex ESR';
+  }
+}
+updateVendorOptionsForProfile();
+
+// ── convert_config: WASM (profile-aware) если загружен, иначе старый WASM, иначе demo ──
+function convert_config(input, src, dst, profile) {
+  if (window._wasmConvertConfigProfiled) {
+    try {
+      return window._wasmConvertConfigProfiled(input, src, dst, profile || '');
+    } catch(e) {
+      console.error('[netconv] WASM (profiled) error, falling back:', e);
+    }
+  }
   if (window._wasmConvertConfig) {
     try {
       return window._wasmConvertConfig(input, src, dst);
@@ -1078,7 +1125,7 @@ function runConvert() {
   // Небольшая задержка для UX — имитация async
   setTimeout(() => {
     try {
-      const raw = convert_config(input, src, dst);
+      const raw = convert_config(input, src, dst, currentProfile);
       const result = typeof raw === 'string' ? JSON.parse(raw) : raw;
 
       document.getElementById('loading').classList.remove('active');
@@ -1190,6 +1237,13 @@ document.addEventListener('keydown', e => {
 
     // Перекрываем demo-функцию реальной
     window._wasmConvertConfig = wasmModule.convert_config;
+    // Новый профиль-осведомлённый экспорт — есть только если WASM
+    // пересобран после разделения netconv-render-vrp на l2/l3. Если
+    // собран старой версией, convert_config_profiled будет undefined,
+    // и JS-обёртка convert_config() сама откатится на обычный экспорт.
+    if (wasmModule.convert_config_profiled) {
+      window._wasmConvertConfigProfiled = wasmModule.convert_config_profiled;
+    }
 
     wasmLoaded = true;
     const notice = document.getElementById('wasm-notice');
