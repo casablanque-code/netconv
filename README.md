@@ -61,7 +61,7 @@ netconv --input switch.cfg  --to vrp --profile l2   # VLANs/switchport only
 netconv --input router.cfg  --to vrp --profile l3   # routing/ACL/NAT only
 ```
 
-This is implemented per-vendor-pair, not as a blanket rule — see the coverage table below for which pairs already enforce it (currently `ios → vrp`; `ios → eltex` doesn't filter yet).
+This is implemented per-vendor-pair, not as a blanket rule — see the coverage table below for which pairs already enforce it (currently `ios → vrp` and `ios → eltex`).
 
 ---
 
@@ -135,11 +135,11 @@ Use netconv as a network config linter in your pipeline:
 | Source | Target | L2 profile | L3 profile |
 |--------|--------|------------|------------|
 | Cisco IOS | Huawei VRP | ✓ Implemented (S-series) | ✓ Implemented (AR/NE) |
-| Cisco IOS | Eltex ESR | 🚧 Planned (MES) | 🚧 In progress (not domain-filtered yet) |
+| Cisco IOS | Eltex | ✓ Implemented (MES, switch) | ✓ Implemented (ESR, router/firewall) |
 | Cisco IOS | VyOS | 🚧 Planned | 🚧 Planned |
 | Cisco ASA | — | n/a (ASA has no L2 role) | 🚧 Planned |
 
-`--profile` without a value (legacy `VrpRenderer`, or any `--to eltex` call) still renders everything unfiltered — that's the "useless L2↔L3 converter" this project is actively moving away from, kept only for backward compatibility until every pair is split.
+`--profile` without a value (legacy `VrpRenderer`/`EltexRenderer`) still renders everything unfiltered — kept only for backward compatibility with existing scripts.
 
 ---
 
@@ -224,7 +224,8 @@ crates/
   netconv-parser-ios/  # Cisco IOS parser: pass1 structural tree, pass2 semantic analysis
   netconv-render-vrp/  # Huawei VRP renderer — VrpL2Renderer / VrpL3Renderer (domain-filtered) +
                         #   legacy VrpRenderer (unfiltered, kept for backward compat)
-  netconv-render-eltex/# Eltex ESR renderer — not yet split into l2/l3
+  netconv-render-eltex/# Eltex renderer — EltexL2Renderer (MES, switch) / EltexL3Renderer (ESR, router) +
+                        #   legacy EltexRenderer (= L3, kept for backward compat)
   netconv-wasm/        # WASM bindings (wasm-bindgen): convert_config (legacy) + convert_config_profiled
 cli/                   # CLI binary (clap) — --profile l2|l3
 web/
