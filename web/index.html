@@ -637,10 +637,8 @@ let currentProfile = 'l3'; // 'l2' | 'l3' — по умолчанию L3, т.к.
 // ── профиль устройства: L2 (switching) / L3 (routing) ──
 // Разделение отражает реальную роль железа: свитч меняют на свитч,
 // роутер на роутер — L2 и L3 никогда не смешиваются в одном выводе.
-// Полностью фильтрует вывод только для пары ios->vrp (VrpL2Renderer /
-// VrpL3Renderer); для ios->eltex профиль пока не фильтрует (Eltex ещё
-// не разделён на l2/l3 — см. roadmap), но UI уже не даёт выбрать
-// нереализованную комбинацию.
+// Фильтрует вывод для обеих реализованных пар: ios->vrp (VrpL2Renderer/
+// VrpL3Renderer) и ios->eltex (EltexL2Renderer/EltexL3Renderer).
 function setProfile(profile, btn) {
   currentProfile = profile;
   document.querySelectorAll('.profile-tabs .filter-btn').forEach(b => b.classList.remove('active'));
@@ -655,16 +653,10 @@ function updateVendorOptionsForProfile() {
 
   if (currentProfile === 'l2') {
     vrpOpt.textContent = 'Huawei VRP (S-series, switch)';
-    // Eltex L2 (MES) ещё не реализован — не даём выбрать нереализованную
-    // пару (см. фикс fba6aa8: "vendor selects offered pairs that aren't
-    // implemented anywhere").
-    eltexOpt.disabled = true;
-    eltexOpt.textContent = 'Eltex MES (L2 — скоро)';
-    if (dst.value === 'eltex') dst.value = 'vrp';
+    eltexOpt.textContent = 'Eltex MES (switch)';
   } else {
     vrpOpt.textContent = 'Huawei VRP (AR/NE, router)';
-    eltexOpt.disabled = false;
-    eltexOpt.textContent = 'Eltex ESR';
+    eltexOpt.textContent = 'Eltex ESR (router)';
   }
 }
 updateVendorOptionsForProfile();
