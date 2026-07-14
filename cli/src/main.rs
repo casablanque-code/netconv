@@ -4,7 +4,7 @@ use netconv_core::traits::{convert, convert_with_profile};
 use netconv_core::report::Severity;
 use netconv_parser_ios::IosParser;
 use netconv_render_vrp::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
-use netconv_render_eltex::EltexRenderer;
+use netconv_render_eltex::{EltexRenderer, EltexL2Renderer, EltexL3Renderer};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -81,9 +81,13 @@ fn main() {
             convert_with_profile(&IosParser, &VrpL3Renderer, &input, DeviceProfile::L3Router)
         }
         ("ios", "vrp", None) => convert(&IosParser, &VrpRenderer, &input),
-        // ios -> eltex: пока не разделён на l2/l3, --profile здесь только
-        // предупреждает через domain_mismatches, не фильтрует вывод
-        ("ios", "eltex", Some(p)) => convert_with_profile(&IosParser, &EltexRenderer, &input, p),
+        // ios -> eltex: теперь тоже разделён на l2 (MES) / l3 (ESR)
+        ("ios", "eltex", Some(DeviceProfile::L2Switch)) => {
+            convert_with_profile(&IosParser, &EltexL2Renderer, &input, DeviceProfile::L2Switch)
+        }
+        ("ios", "eltex", Some(DeviceProfile::L3Router)) => {
+            convert_with_profile(&IosParser, &EltexL3Renderer, &input, DeviceProfile::L3Router)
+        }
         ("ios", "eltex", None) => convert(&IosParser, &EltexRenderer, &input),
         (src, tgt, _) => {
             eprintln!("Пара {}->{} пока не поддерживается.", src, tgt);
@@ -134,8 +138,8 @@ fn main() {
             for m in &r.domain_mismatches {
                 eprintln!(" [{}] {}", m.domain, m.detail);
             }
-            if args.to == "vrp" {
-                eprintln!(" Эти команды НЕ попали в выходной конфиг — рендерер VRP уже");
+            if args.to == "vrp" || args.to == "eltex" {
+                eprintln!(" Эти команды НЕ попали в выходной конфиг — рендерер {} уже", args.to);
                 eprintln!(" фильтрует по профилю. Оригинал остался только в источнике.");
             } else {
                 eprintln!(" Рендерер {} пока не фильтрует по профилю — эти команды всё ещё", args.to);

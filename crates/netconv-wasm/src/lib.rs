@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 use netconv_parser_ios::IosParser;
 use netconv_render_vrp::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
-use netconv_render_eltex::EltexRenderer;
+use netconv_render_eltex::{EltexRenderer, EltexL2Renderer, EltexL3Renderer};
 use serde::{Deserialize, Serialize};
 
 #[wasm_bindgen(start)]
@@ -98,8 +98,9 @@ fn run_conversion_profiled(input: &str, source: &str, target: &str, profile: &st
     match (source, target, profile) {
         ("ios", "vrp", "l2") => do_convert(&IosParser, &VrpL2Renderer, input, source, target),
         ("ios", "vrp", "l3") => do_convert(&IosParser, &VrpL3Renderer, input, source, target),
-        // Неизвестный/пустой профиль или пара без l2/l3-разделения (eltex
-        // пока не разделён) — прежнее нефильтрующее поведение.
+        ("ios", "eltex", "l2") => do_convert(&IosParser, &EltexL2Renderer, input, source, target),
+        ("ios", "eltex", "l3") => do_convert(&IosParser, &EltexL3Renderer, input, source, target),
+        // Неизвестный/пустой профиль — прежнее нефильтрующее поведение.
         _ => run_conversion(input, source, target),
     }
 }
