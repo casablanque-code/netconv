@@ -1,13 +1,13 @@
+use crate::acl::render_acls;
+use crate::iface::render_interfaces;
+use crate::nat::render_nat;
+use crate::routing::render_routing;
+use crate::scope::RenderScope;
+use crate::system::render_system;
+use crate::vlan::render_vlans;
 use netconv_core::ir::NetworkConfig;
 use netconv_core::report::ConversionReport;
 use netconv_core::traits::ConfigRenderer;
-use crate::iface::render_interfaces;
-use crate::routing::render_routing;
-use crate::acl::render_acls;
-use crate::nat::render_nat;
-use crate::system::render_system;
-use crate::vlan::render_vlans;
-use crate::scope::RenderScope;
 
 /// Полный (не фильтрующий по домену) рендерер — прежнее поведение
 /// `VrpRenderer` до разделения на l2/l3. Оставлен ради обратной
@@ -31,7 +31,11 @@ pub struct VrpL3Renderer;
 impl ConfigRenderer for VrpRenderer {
     type Error = VrpRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
         Ok(render_body(config, report, RenderScope::All, "Huawei VRP"))
     }
 
@@ -43,8 +47,17 @@ impl ConfigRenderer for VrpRenderer {
 impl ConfigRenderer for VrpL2Renderer {
     type Error = VrpRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
-        Ok(render_body(config, report, RenderScope::L2, "Huawei VRP (S-series, switch)"))
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
+        Ok(render_body(
+            config,
+            report,
+            RenderScope::L2,
+            "Huawei VRP (S-series, switch)",
+        ))
     }
 
     fn vendor_name(&self) -> &str {
@@ -55,8 +68,17 @@ impl ConfigRenderer for VrpL2Renderer {
 impl ConfigRenderer for VrpL3Renderer {
     type Error = VrpRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
-        Ok(render_body(config, report, RenderScope::L3, "Huawei VRP (AR/NE, router)"))
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
+        Ok(render_body(
+            config,
+            report,
+            RenderScope::L3,
+            "Huawei VRP (AR/NE, router)",
+        ))
     }
 
     fn vendor_name(&self) -> &str {
@@ -67,7 +89,12 @@ impl ConfigRenderer for VrpL3Renderer {
 /// Общее тело рендеринга для всех трёх режимов. Секции, не относящиеся
 /// к scope, просто не вызываются — а не вызываются и потом дропаются,
 /// как раньше молча делал EltexRenderer для L2 на ESR.
-fn render_body(config: &NetworkConfig, report: &mut ConversionReport, scope: RenderScope, vendor_label: &str) -> String {
+fn render_body(
+    config: &NetworkConfig,
+    report: &mut ConversionReport,
+    scope: RenderScope,
+    vendor_label: &str,
+) -> String {
     report.target_vendor = vendor_label.to_string();
 
     let mut out = Vec::<String>::new();

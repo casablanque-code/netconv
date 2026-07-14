@@ -1,8 +1,8 @@
-use std::net::IpAddr;
+use crate::tree::{RawNode, RawTree};
 use ipnet::IpNet;
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
-use crate::tree::{RawNode, RawTree};
+use std::net::IpAddr;
 
 /// Pass 2: обходим RawTree, заполняем IR.
 /// Неизвестные ноды → UnknownBlock.
@@ -29,7 +29,10 @@ impl SemanticParser {
         let mut pools = std::collections::HashMap::new();
         for node in &tree.nodes {
             let tokens: Vec<&str> = node.text.split_whitespace().collect();
-            if tokens.get(0) == Some(&"ip") && tokens.get(1) == Some(&"nat") && tokens.get(2) == Some(&"pool") {
+            if tokens.get(0) == Some(&"ip")
+                && tokens.get(1) == Some(&"nat")
+                && tokens.get(2) == Some(&"pool")
+            {
                 if let Some(pool) = self.parse_nat_pool_decl(&tokens[3..]) {
                     pools.insert(pool.name.clone(), pool);
                 }
@@ -45,11 +48,13 @@ impl SemanticParser {
         let end: IpAddr = tokens.get(2)?.parse().ok()?;
 
         let prefix = if let Some(pos) = tokens.iter().position(|&t| t == "prefix-length") {
-            tokens.get(pos + 1)
+            tokens
+                .get(pos + 1)
                 .and_then(|s| s.parse::<u8>().ok())
                 .and_then(|len| format!("{}/{}", start, len).parse().ok())
         } else if let Some(pos) = tokens.iter().position(|&t| t == "netmask") {
-            tokens.get(pos + 1)
+            tokens
+                .get(pos + 1)
                 .and_then(|s| s.parse::<IpAddr>().ok())
                 .and_then(mask_to_prefix_len)
                 .and_then(|len| format!("{}/{}", start, len).parse().ok())
@@ -113,9 +118,8 @@ impl SemanticParser {
             // Финальный маркер конфига — игнорируем
             "end" => {}
             // Платформо-специфичные — явно помечаем, не смешиваем с unknown
-            "version" | "boot-start-marker" | "boot-end-marker" |
-            "no" | "service" | "crypto" | "vtp" | "clock" |
-            "system" | "errdisable" | "vstack" | "no-service" => {
+            "version" | "boot-start-marker" | "boot-end-marker" | "no" | "service" | "crypto"
+            | "vtp" | "clock" | "system" | "errdisable" | "vstack" | "no-service" => {
                 cfg.platform_specific.push(UnknownBlock {
                     line: node.line_num,
                     context: "global".to_string(),
@@ -161,7 +165,9 @@ impl SemanticParser {
         report: &mut ConversionReport,
     ) {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
-        if tokens.is_empty() { return; }
+        if tokens.is_empty() {
+            return;
+        }
 
         match tokens[0] {
             "description" => {
@@ -171,7 +177,10 @@ impl SemanticParser {
                 "address" => {
                     if let Some(addr) = self.parse_ip_address(&tokens[2..]) {
                         let secondary = tokens.contains(&"secondary");
-                        iface.addresses.push(IpAddress { prefix: addr, secondary });
+                        iface.addresses.push(IpAddress {
+                            prefix: addr,
+                            secondary,
+                        });
                     }
                 }
                 "helper-address" => {
@@ -182,7 +191,7 @@ impl SemanticParser {
                 "access-group" => {
                     if tokens.len() >= 4 {
                         match tokens[3] {
-                            "in"  => iface.acl_in  = Some(tokens[2].to_string()),
+                            "in" => iface.acl_in = Some(tokens[2].to_string()),
                             "out" => iface.acl_out = Some(tokens[2].to_string()),
                             _ => {}
                         }
@@ -190,7 +199,7 @@ impl SemanticParser {
                 }
                 "nat" => {
                     iface.nat_direction = match tokens.get(2) {
-                        Some(&"inside")  => Some(NatDirection::Inside),
+                        Some(&"inside") => Some(NatDirection::Inside),
                         Some(&"outside") => Some(NatDirection::Outside),
                         _ => None,
                     };
@@ -207,8 +216,10 @@ impl SemanticParser {
                 // Ветка никогда не срабатывала и проваливалась в _ (тот же
                 // итоговый игнор), но вводила в заблуждение при чтении кода.
                 // Правильная проверка многословной команды — через tokens.get(2).
-                "ip" if tokens.get(2) == Some(&"address") => { /* no ip address — игнорируем */ }
-                _ => { /* остальные no-команды — игнорируем тихо */ }
+                "ip" if tokens.get(2) == Some(&"address") => { /* no ip address — игнорируем */
+                }
+                _ => { /* остальные no-команды — игнорируем тихо */
+                }
             },
             "shutdown" => iface.shutdown = true,
             "mtu" => {
@@ -224,7 +235,7 @@ impl SemanticParser {
                 iface.duplex = tokens.get(1).map(|s| match *s {
                     "full" => Duplex::Full,
                     "half" => Duplex::Half,
-                    _      => Duplex::Auto,
+                    _ => Duplex::Auto,
                 });
             }
             "switchport" => {
@@ -249,7 +260,7 @@ impl SemanticParser {
                     match tokens[1] {
                         "broadcast" => sc.broadcast_level = Some(level),
                         "multicast" => sc.multicast_level = Some(level),
-                        "unicast"   => sc.unicast_level   = Some(level),
+                        "unicast" => sc.unicast_level = Some(level),
                         _ => {}
                     }
                 }
@@ -260,8 +271,8 @@ impl SemanticParser {
                 // spanning-tree bpdufilter enable
                 // spanning-tree guard root
                 match tokens.get(1) {
-                    Some(&"portfast")   => iface.stp.portfast   = true,
-                    Some(&"bpduguard")  => iface.stp.bpduguard  = tokens.get(2) != Some(&"disable"),
+                    Some(&"portfast") => iface.stp.portfast = true,
+                    Some(&"bpduguard") => iface.stp.bpduguard = tokens.get(2) != Some(&"disable"),
                     Some(&"bpdufilter") => iface.stp.bpdufilter = tokens.get(2) != Some(&"disable"),
                     Some(&"guard") if tokens.get(2) == Some(&"root") => iface.stp.guard_root = true,
                     _ => {}
@@ -271,13 +282,20 @@ impl SemanticParser {
         }
     }
 
-    fn unknown_iface_cmd(&self, node: &RawNode, iface: &mut Interface, report: &mut ConversionReport) {
+    fn unknown_iface_cmd(
+        &self,
+        node: &RawNode,
+        iface: &mut Interface,
+        report: &mut ConversionReport,
+    ) {
         let ctx = format!("interface {}", iface.name.original);
         report.add_unknown(node.full(), &ctx);
     }
 
     fn parse_ip_address(&self, tokens: &[&str]) -> Option<IpNet> {
-        if tokens.is_empty() { return None; }
+        if tokens.is_empty() {
+            return None;
+        }
 
         // CIDR формат: "192.168.1.1/24"
         if tokens[0].contains('/') {
@@ -300,7 +318,7 @@ impl SemanticParser {
             Some(&"mode") => {
                 let mode = match tokens.get(1) {
                     Some(&"access") => L2Mode::Access,
-                    Some(&"trunk")  => L2Mode::Trunk,
+                    Some(&"trunk") => L2Mode::Trunk,
                     _ => return,
                 };
                 let l2 = iface.l2.get_or_insert(L2Config {
@@ -366,18 +384,29 @@ impl SemanticParser {
             }
             Some(&"priority") => {
                 let p = tokens.get(1).and_then(|s| s.parse().ok());
-                iface.ospf.get_or_insert_with(|| default_iface_ospf()).priority = p;
+                iface
+                    .ospf
+                    .get_or_insert_with(|| default_iface_ospf())
+                    .priority = p;
             }
             Some(&"hello-interval") => {
                 let v: u32 = tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(10);
                 let ospf = iface.ospf.get_or_insert_with(|| default_iface_ospf());
-                ospf.timers.get_or_insert(OspfIfTimers { hello_interval: v, dead_interval: 40 })
+                ospf.timers
+                    .get_or_insert(OspfIfTimers {
+                        hello_interval: v,
+                        dead_interval: 40,
+                    })
                     .hello_interval = v;
             }
             Some(&"dead-interval") => {
                 let v: u32 = tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(40);
                 let ospf = iface.ospf.get_or_insert_with(|| default_iface_ospf());
-                ospf.timers.get_or_insert(OspfIfTimers { hello_interval: 10, dead_interval: v })
+                ospf.timers
+                    .get_or_insert(OspfIfTimers {
+                        hello_interval: 10,
+                        dead_interval: v,
+                    })
                     .dead_interval = v;
             }
             Some(&"authentication") => {
@@ -386,7 +415,10 @@ impl SemanticParser {
                     // пока помечаем что MD5 включена
                     let ospf = iface.ospf.get_or_insert_with(|| default_iface_ospf());
                     if ospf.auth.is_none() {
-                        ospf.auth = Some(OspfAuth::Md5 { key_id: 1, key: String::new() });
+                        ospf.auth = Some(OspfAuth::Md5 {
+                            key_id: 1,
+                            key: String::new(),
+                        });
                     }
                 }
             }
@@ -396,7 +428,10 @@ impl SemanticParser {
                     tokens.get(3), // message-digest-key <id> md5 <key>
                 ) {
                     let ospf = iface.ospf.get_or_insert_with(|| default_iface_ospf());
-                    ospf.auth = Some(OspfAuth::Md5 { key_id: id, key: key.to_string() });
+                    ospf.auth = Some(OspfAuth::Md5 {
+                        key_id: id,
+                        key: key.to_string(),
+                    });
                 }
             }
             Some(pid) if pid.parse::<u32>().is_ok() => {
@@ -447,9 +482,12 @@ impl SemanticParser {
                 // standby <g> timers [msec] <hello> [msec] <hold>
                 // упрощённый парсинг секундных таймеров
                 let hello = tokens.get(2).and_then(|s| s.parse::<u32>().ok());
-                let hold  = tokens.get(3).and_then(|s| s.parse::<u32>().ok());
+                let hold = tokens.get(3).and_then(|s| s.parse::<u32>().ok());
                 if let (Some(h), Some(d)) = (hello, hold) {
-                    hsrp.timers = Some(HsrpTimers { hello_ms: h * 1000, hold_ms: d * 1000 });
+                    hsrp.timers = Some(HsrpTimers {
+                        hello_ms: h * 1000,
+                        hold_ms: d * 1000,
+                    });
                 }
             }
             Some(&"track") => {
@@ -457,7 +495,10 @@ impl SemanticParser {
                     tokens.get(2).and_then(|s| s.parse().ok()),
                     tokens.get(4).and_then(|s| s.parse().ok()),
                 ) {
-                    hsrp.track.push(HsrpTrack { object: obj, decrement: dec });
+                    hsrp.track.push(HsrpTrack {
+                        object: obj,
+                        decrement: dec,
+                    });
                 }
             }
             _ => {}
@@ -478,7 +519,9 @@ impl SemanticParser {
         nat_pools: &std::collections::HashMap<String, NatPool>,
     ) {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
-        if tokens.len() < 2 { return; }
+        if tokens.len() < 2 {
+            return;
+        }
 
         match tokens[1] {
             "domain-name" | "domain" => {
@@ -509,7 +552,11 @@ impl SemanticParser {
                 // ip ssh version 2
                 if tokens.get(2) == Some(&"version") {
                     let ver: u8 = tokens.get(3).and_then(|s| s.parse().ok()).unwrap_or(2);
-                    cfg.ssh = Some(SshConfig { version: ver, timeout: None, retries: None });
+                    cfg.ssh = Some(SshConfig {
+                        version: ver,
+                        timeout: None,
+                        retries: None,
+                    });
                 }
             }
             "http" => {
@@ -540,7 +587,9 @@ impl SemanticParser {
     }
 
     fn parse_static_route(&self, tokens: &[&str]) -> Option<StaticRoute> {
-        if tokens.len() < 2 { return None; }
+        if tokens.len() < 2 {
+            return None;
+        }
 
         // ip route <network> <mask> <next-hop> [distance] [name <n>] [permanent]
         let net_addr: IpAddr = tokens[0].parse().ok()?;
@@ -548,7 +597,9 @@ impl SemanticParser {
         let prefix_len = mask_to_prefix_len(mask)?;
         let prefix: IpNet = format!("{}/{}", net_addr, prefix_len).parse().ok()?;
 
-        if tokens.len() < 3 { return None; }
+        if tokens.len() < 3 {
+            return None;
+        }
         let nh_str = tokens[2];
 
         let next_hop = if nh_str.eq_ignore_ascii_case("Null0") {
@@ -575,7 +626,10 @@ impl SemanticParser {
                     route.name = Some(tokens[i + 1].to_string());
                     i += 2;
                 }
-                "permanent" => { route.permanent = true; i += 1; }
+                "permanent" => {
+                    route.permanent = true;
+                    i += 1;
+                }
                 "tag" if i + 1 < tokens.len() => {
                     route.tag = tokens.get(i + 1).and_then(|s| s.parse().ok());
                     i += 2;
@@ -584,7 +638,9 @@ impl SemanticParser {
                     route.distance = n.parse().ok();
                     i += 1;
                 }
-                _ => { i += 1; }
+                _ => {
+                    i += 1;
+                }
             }
         }
 
@@ -595,7 +651,12 @@ impl SemanticParser {
     // Router blocks
     // -----------------------------------------------------------------------
 
-    fn handle_router(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    fn handle_router(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+    ) {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
         match tokens.get(1) {
             Some(&"ospf") => {
@@ -624,7 +685,12 @@ impl SemanticParser {
         }
     }
 
-    fn parse_ospf_process(&self, pid: u32, node: &RawNode, report: &mut ConversionReport) -> OspfProcess {
+    fn parse_ospf_process(
+        &self,
+        pid: u32,
+        node: &RawNode,
+        report: &mut ConversionReport,
+    ) -> OspfProcess {
         let mut process = OspfProcess {
             process_id: pid,
             router_id: None,
@@ -656,12 +722,15 @@ impl SemanticParser {
             if let Some(pos) = areas.iter().position(|(k, _)| k == key) {
                 &mut areas[pos].1
             } else {
-                areas.push((key.to_string(), OspfAreaConfig {
-                    area,
-                    networks: vec![],
-                    area_type: OspfAreaType::Normal,
-                    auth: None,
-                }));
+                areas.push((
+                    key.to_string(),
+                    OspfAreaConfig {
+                        area,
+                        networks: vec![],
+                        area_type: OspfAreaType::Normal,
+                        auth: None,
+                    },
+                ));
                 &mut areas.last_mut().unwrap().1
             }
         }
@@ -675,12 +744,21 @@ impl SemanticParser {
                 Some(&"network") => {
                     // network <addr> <wildcard> area <area>
                     if tokens.len() >= 5 && tokens[3] == "area" {
-                        let addr: IpAddr = match tokens[1].parse() { Ok(v) => v, Err(_) => continue };
-                        let wc: IpAddr   = match tokens[2].parse() { Ok(v) => v, Err(_) => continue };
+                        let addr: IpAddr = match tokens[1].parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        let wc: IpAddr = match tokens[2].parse() {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
                         let area_str = tokens[4];
                         let area = OspfArea::parse(area_str);
                         let prefix = wildcard_to_prefix(addr, wc);
-                        let net = OspfNetwork { prefix, wildcard: true };
+                        let net = OspfNetwork {
+                            prefix,
+                            wildcard: true,
+                        };
 
                         let key = area_str.to_string();
                         let entry = get_or_insert_area(&mut areas, &key, area);
@@ -699,7 +777,11 @@ impl SemanticParser {
                         let area_str = tokens[1];
                         match tokens[2] {
                             "stub" => {
-                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
+                                let entry = get_or_insert_area(
+                                    &mut areas,
+                                    area_str,
+                                    OspfArea::parse(area_str),
+                                );
                                 entry.area_type = if tokens.get(3) == Some(&"no-summary") {
                                     OspfAreaType::StubNoSummary
                                 } else {
@@ -707,7 +789,11 @@ impl SemanticParser {
                                 };
                             }
                             "nssa" => {
-                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
+                                let entry = get_or_insert_area(
+                                    &mut areas,
+                                    area_str,
+                                    OspfArea::parse(area_str),
+                                );
                                 entry.area_type = if tokens.get(3) == Some(&"no-summary") {
                                     OspfAreaType::NssaNoSummary
                                 } else {
@@ -716,11 +802,18 @@ impl SemanticParser {
                             }
                             "authentication" => {
                                 let auth = if tokens.get(3) == Some(&"message-digest") {
-                                    OspfAuth::Md5 { key_id: 1, key: String::new() }
+                                    OspfAuth::Md5 {
+                                        key_id: 1,
+                                        key: String::new(),
+                                    }
                                 } else {
                                     OspfAuth::Simple(String::new())
                                 };
-                                let entry = get_or_insert_area(&mut areas, area_str, OspfArea::parse(area_str));
+                                let entry = get_or_insert_area(
+                                    &mut areas,
+                                    area_str,
+                                    OspfArea::parse(area_str),
+                                );
                                 entry.auth = Some(auth);
                             }
                             _ => {}
@@ -730,13 +823,21 @@ impl SemanticParser {
                 Some(&"default-information") => {
                     // default-information originate [always] [metric <n>] [metric-type <n>]
                     let always = tokens.contains(&"always");
-                    let metric = tokens.iter().position(|&t| t == "metric")
+                    let metric = tokens
+                        .iter()
+                        .position(|&t| t == "metric")
                         .and_then(|i| tokens.get(i + 1))
                         .and_then(|s| s.parse().ok());
-                    let metric_type = tokens.iter().position(|&t| t == "metric-type")
+                    let metric_type = tokens
+                        .iter()
+                        .position(|&t| t == "metric-type")
                         .and_then(|i| tokens.get(i + 1))
                         .and_then(|s| s.parse().ok());
-                    process.default_originate = Some(OspfDefaultOriginate { always, metric, metric_type });
+                    process.default_originate = Some(OspfDefaultOriginate {
+                        always,
+                        metric,
+                        metric_type,
+                    });
                 }
                 Some(&"redistribute") => {
                     if let Some(r) = self.parse_ospf_redistribute(&tokens[1..]) {
@@ -762,24 +863,47 @@ impl SemanticParser {
     fn parse_ospf_redistribute(&self, tokens: &[&str]) -> Option<OspfRedistribute> {
         let source = match tokens.first() {
             Some(&"connected") => RedistributeSource::Connected,
-            Some(&"static")    => RedistributeSource::Static,
-            Some(&"rip")       => RedistributeSource::Rip,
-            Some(&"bgp")  => RedistributeSource::Bgp(tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(65000)),
-            Some(&"eigrp") => RedistributeSource::Eigrp(tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(1)),
+            Some(&"static") => RedistributeSource::Static,
+            Some(&"rip") => RedistributeSource::Rip,
+            Some(&"bgp") => {
+                RedistributeSource::Bgp(tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(65000))
+            }
+            Some(&"eigrp") => {
+                RedistributeSource::Eigrp(tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or(1))
+            }
             _ => return None,
         };
 
-        let subnets     = tokens.contains(&"subnets");
-        let metric      = tokens.iter().position(|&t| t == "metric")
-            .and_then(|i| tokens.get(i + 1)).and_then(|s| s.parse().ok());
-        let metric_type = tokens.iter().position(|&t| t == "metric-type")
-            .and_then(|i| tokens.get(i + 1)).and_then(|s| s.parse().ok());
-        let tag         = tokens.iter().position(|&t| t == "tag")
-            .and_then(|i| tokens.get(i + 1)).and_then(|s| s.parse().ok());
-        let route_map   = tokens.iter().position(|&t| t == "route-map")
-            .and_then(|i| tokens.get(i + 1)).map(|s| s.to_string());
+        let subnets = tokens.contains(&"subnets");
+        let metric = tokens
+            .iter()
+            .position(|&t| t == "metric")
+            .and_then(|i| tokens.get(i + 1))
+            .and_then(|s| s.parse().ok());
+        let metric_type = tokens
+            .iter()
+            .position(|&t| t == "metric-type")
+            .and_then(|i| tokens.get(i + 1))
+            .and_then(|s| s.parse().ok());
+        let tag = tokens
+            .iter()
+            .position(|&t| t == "tag")
+            .and_then(|i| tokens.get(i + 1))
+            .and_then(|s| s.parse().ok());
+        let route_map = tokens
+            .iter()
+            .position(|&t| t == "route-map")
+            .and_then(|i| tokens.get(i + 1))
+            .map(|s| s.to_string());
 
-        Some(OspfRedistribute { source, metric, metric_type, subnets, tag, route_map })
+        Some(OspfRedistribute {
+            source,
+            metric,
+            metric_type,
+            subnets,
+            tag,
+            route_map,
+        })
     }
 
     fn parse_bgp(&self, asn: u32, node: &RawNode, report: &mut ConversionReport) -> BgpConfig {
@@ -800,7 +924,11 @@ impl SemanticParser {
             match tokens.first() {
                 Some(&"bgp") => self.parse_bgp_global_cmd(&tokens[1..], &mut bgp),
                 Some(&"neighbor") => {
-                    self.parse_bgp_neighbor_cmd(&tokens[1..], &mut bgp.neighbors, &mut bgp.peer_groups);
+                    self.parse_bgp_neighbor_cmd(
+                        &tokens[1..],
+                        &mut bgp.neighbors,
+                        &mut bgp.peer_groups,
+                    );
                 }
                 Some(&"network") => {
                     if let Some(net) = self.parse_bgp_network(&tokens[1..]) {
@@ -850,7 +978,9 @@ impl SemanticParser {
         neighbors: &mut Vec<BgpNeighbor>,
         peer_groups: &mut Vec<BgpPeerGroup>,
     ) {
-        if tokens.is_empty() { return; }
+        if tokens.is_empty() {
+            return;
+        }
 
         let addr_str = tokens[0];
 
@@ -927,11 +1057,15 @@ impl SemanticParser {
             Some(&"update-source") => {
                 neighbor.update_source = tokens.get(2).map(|s| s.to_string());
             }
-            Some(&"next-hop-self") => { neighbor.next_hop_self = true; }
+            Some(&"next-hop-self") => {
+                neighbor.next_hop_self = true;
+            }
             Some(&"password") => {
                 neighbor.password = tokens.get(3).map(|s| s.to_string()); // password 0|7 <key>
             }
-            Some(&"shutdown") => { neighbor.shutdown = true; }
+            Some(&"shutdown") => {
+                neighbor.shutdown = true;
+            }
             Some(&"peer-group") => {
                 // neighbor 1.2.3.4 peer-group MY-PEERS — привязка к группе
                 neighbor.peer_group = tokens.get(2).map(|s| s.to_string());
@@ -939,7 +1073,7 @@ impl SemanticParser {
             Some(&"route-map") => {
                 let name = tokens.get(2).map(|s| s.to_string());
                 match tokens.get(3) {
-                    Some(&"in")  => neighbor.route_map_in  = name,
+                    Some(&"in") => neighbor.route_map_in = name,
                     Some(&"out") => neighbor.route_map_out = name,
                     _ => {}
                 }
@@ -947,16 +1081,26 @@ impl SemanticParser {
             Some(&"prefix-list") => {
                 let name = tokens.get(2).map(|s| s.to_string());
                 match tokens.get(3) {
-                    Some(&"in")  => neighbor.prefix_list_in  = name,
+                    Some(&"in") => neighbor.prefix_list_in = name,
                     Some(&"out") => neighbor.prefix_list_out = name,
                     _ => {}
                 }
             }
-            Some(&"soft-reconfiguration") => { neighbor.soft_reconfiguration = true; }
-            Some(&"send-community") => { neighbor.send_community = true; }
-            Some(&"remove-private-as") => { neighbor.remove_private_as = true; }
-            Some(&"default-originate") => { neighbor.default_originate = true; }
-            Some(&"activate") => { neighbor.activate = true; }
+            Some(&"soft-reconfiguration") => {
+                neighbor.soft_reconfiguration = true;
+            }
+            Some(&"send-community") => {
+                neighbor.send_community = true;
+            }
+            Some(&"remove-private-as") => {
+                neighbor.remove_private_as = true;
+            }
+            Some(&"default-originate") => {
+                neighbor.default_originate = true;
+            }
+            Some(&"activate") => {
+                neighbor.activate = true;
+            }
             _ => {}
         }
     }
@@ -973,18 +1117,18 @@ impl SemanticParser {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
 
         let afi = match tokens.get(1) {
-            Some(&"ipv4")   => BgpAfi::Ipv4,
-            Some(&"ipv6")   => BgpAfi::Ipv6,
-            Some(&"vpnv4")  => BgpAfi::Vpnv4,
-            Some(&"l2vpn")  => BgpAfi::L2vpn,
+            Some(&"ipv4") => BgpAfi::Ipv4,
+            Some(&"ipv6") => BgpAfi::Ipv6,
+            Some(&"vpnv4") => BgpAfi::Vpnv4,
+            Some(&"l2vpn") => BgpAfi::L2vpn,
             _ => BgpAfi::Ipv4, // default
         };
 
         let safi = match tokens.get(2) {
-            Some(&"multicast")       => BgpSafi::Multicast,
+            Some(&"multicast") => BgpSafi::Multicast,
             Some(&"labeled-unicast") => BgpSafi::Labeled,
-            Some(&"evpn")            => BgpSafi::Evpn,
-            _                        => BgpSafi::Unicast,
+            Some(&"evpn") => BgpSafi::Evpn,
+            _ => BgpSafi::Unicast,
         };
 
         let mut af = BgpAddressFamily {
@@ -1013,7 +1157,9 @@ impl SemanticParser {
                     }
                 }
                 Some(&"neighbor") => {
-                    if ct.len() < 3 { continue; }
+                    if ct.len() < 3 {
+                        continue;
+                    }
                     let addr = if let Ok(ip) = ct[1].parse::<IpAddr>() {
                         BgpNeighborAddr::Ip(ip)
                     } else {
@@ -1032,8 +1178,8 @@ impl SemanticParser {
                             // ct = ["neighbor", "10.0.0.3", "soft-reconfiguration", ...]
                             // apply_bgp_neighbor_attr ожидает [addr, attr, ...]
                             // поэтому передаём &ct[1..]
-                            let existing = af.neighbor_settings.iter_mut()
-                                .find(|n| n.address == addr);
+                            let existing =
+                                af.neighbor_settings.iter_mut().find(|n| n.address == addr);
                             if let Some(n) = existing {
                                 self.apply_bgp_neighbor_attr(&ct[1..], n, &mut vec![]);
                             } else {
@@ -1083,7 +1229,9 @@ impl SemanticParser {
     fn parse_aggregate_address(&self, tokens: &[&str]) -> Option<BgpAggregate> {
         // aggregate-address <prefix/len> [summary-only] [as-set]
         // aggregate-address <addr> <mask> [summary-only] [as-set]
-        if tokens.is_empty() { return None; }
+        if tokens.is_empty() {
+            return None;
+        }
 
         let prefix = if tokens[0].contains('/') {
             tokens[0].parse().ok()?
@@ -1106,7 +1254,9 @@ impl SemanticParser {
     fn parse_bgp_network(&self, tokens: &[&str]) -> Option<IpNet> {
         // network <addr> mask <mask>
         // network <addr/prefix>
-        if tokens.is_empty() { return None; }
+        if tokens.is_empty() {
+            return None;
+        }
 
         if tokens[0].contains('/') {
             return tokens[0].parse().ok();
@@ -1135,11 +1285,15 @@ impl SemanticParser {
             match tokens.first() {
                 Some(&"network") => {
                     if let Ok(addr) = tokens.get(1).unwrap_or(&"").parse::<IpAddr>() {
-                        let wc: IpAddr = tokens.get(2)
+                        let wc: IpAddr = tokens
+                            .get(2)
                             .and_then(|s| s.parse().ok())
                             .unwrap_or("0.0.0.255".parse().unwrap());
                         let prefix = wildcard_to_prefix(addr, wc);
-                        eigrp.networks.push(OspfNetwork { prefix, wildcard: true });
+                        eigrp.networks.push(OspfNetwork {
+                            prefix,
+                            wildcard: true,
+                        });
                     }
                 }
                 Some(&"passive-interface") => {
@@ -1165,7 +1319,12 @@ impl SemanticParser {
     // ACL
     // -----------------------------------------------------------------------
 
-    fn handle_acl_global(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    fn handle_acl_global(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+    ) {
         // Два формата:
         // 1. ip access-list [standard|extended] <name>  (named, children = entries)
         // 2. access-list <number> permit/deny ...       (numbered, одна строка)
@@ -1179,7 +1338,9 @@ impl SemanticParser {
         }
 
         // ip access-list standard/extended <name>
-        if tokens.len() < 3 { return; }
+        if tokens.len() < 3 {
+            return;
+        }
         let acl_type = match tokens.get(if tokens[0] == "ip" { 2 } else { 1 }) {
             Some(&"standard") => AclType::Standard,
             Some(&"extended") => AclType::Extended,
@@ -1215,13 +1376,27 @@ impl SemanticParser {
         cfg.acls.push(acl);
     }
 
-    fn parse_numbered_acl_line(&self, node: &RawNode, cfg: &mut NetworkConfig, _report: &mut ConversionReport) {
+    fn parse_numbered_acl_line(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        _report: &mut ConversionReport,
+    ) {
         // access-list <number> [permit|deny] ...
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
-        if tokens.len() < 3 { return; }
+        if tokens.len() < 3 {
+            return;
+        }
 
-        let number: u32 = match tokens[1].parse() { Ok(n) => n, Err(_) => return };
-        let acl_type = if number < 100 { AclType::Standard } else { AclType::Extended };
+        let number: u32 = match tokens[1].parse() {
+            Ok(n) => n,
+            Err(_) => return,
+        };
+        let acl_type = if number < 100 {
+            AclType::Standard
+        } else {
+            AclType::Extended
+        };
 
         let entry = match self.parse_acl_entry(&tokens[2..], 10) {
             Some(e) => e,
@@ -1229,20 +1404,30 @@ impl SemanticParser {
         };
 
         // Находим или создаём ACL с этим номером
-        if let Some(acl) = cfg.acls.iter_mut().find(|a| matches!(&a.name, AclName::Numbered(n) if *n == number)) {
+        if let Some(acl) = cfg
+            .acls
+            .iter_mut()
+            .find(|a| matches!(&a.name, AclName::Numbered(n) if *n == number))
+        {
             let next_seq = acl.entries.len() as u32 * 10 + 10;
             let mut e = entry;
             e.sequence = Some(next_seq);
             acl.entries.push(e);
         } else {
-            let mut acl = Acl { name: AclName::Numbered(number), acl_type, entries: vec![] };
+            let mut acl = Acl {
+                name: AclName::Numbered(number),
+                acl_type,
+                entries: vec![],
+            };
             acl.entries.push(entry);
             cfg.acls.push(acl);
         }
     }
 
     fn parse_acl_entry(&self, tokens: &[&str], default_seq: u32) -> Option<AclEntry> {
-        if tokens.is_empty() { return None; }
+        if tokens.is_empty() {
+            return None;
+        }
 
         let mut pos = 0;
 
@@ -1274,19 +1459,37 @@ impl SemanticParser {
         // action: permit | deny
         let action = match tokens.get(pos) {
             Some(&"permit") => AclAction::Permit,
-            Some(&"deny")   => AclAction::Deny,
+            Some(&"deny") => AclAction::Deny,
             _ => return None,
         };
         pos += 1;
 
         // protocol (только для extended)
         let protocol = match tokens.get(pos) {
-            Some(&"ip")   => { pos += 1; Some(AclProtocol::Ip) }
-            Some(&"tcp")  => { pos += 1; Some(AclProtocol::Tcp) }
-            Some(&"udp")  => { pos += 1; Some(AclProtocol::Udp) }
-            Some(&"icmp") => { pos += 1; Some(AclProtocol::Icmp) }
-            Some(&"esp")  => { pos += 1; Some(AclProtocol::Esp) }
-            Some(&"ahp")  => { pos += 1; Some(AclProtocol::Ahp) }
+            Some(&"ip") => {
+                pos += 1;
+                Some(AclProtocol::Ip)
+            }
+            Some(&"tcp") => {
+                pos += 1;
+                Some(AclProtocol::Tcp)
+            }
+            Some(&"udp") => {
+                pos += 1;
+                Some(AclProtocol::Udp)
+            }
+            Some(&"icmp") => {
+                pos += 1;
+                Some(AclProtocol::Icmp)
+            }
+            Some(&"esp") => {
+                pos += 1;
+                Some(AclProtocol::Esp)
+            }
+            Some(&"ahp") => {
+                pos += 1;
+                Some(AclProtocol::Ahp)
+            }
             Some(n) if n.parse::<u8>().is_ok() => {
                 let p = n.parse().ok();
                 pos += 1;
@@ -1337,7 +1540,10 @@ impl SemanticParser {
                 (AclMatch::Any, port, 1 + pc)
             }
             "host" => {
-                let ip = tokens.get(1).and_then(|s| s.parse().ok()).unwrap_or("0.0.0.0".parse().unwrap());
+                let ip = tokens
+                    .get(1)
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or("0.0.0.0".parse().unwrap());
                 // Баг: порт после "host <ip>" раньше вообще не считывался —
                 // "permit tcp any host 203.0.113.2 eq 443" терял "eq 443"
                 // полностью (consumed было всегда 2, eq/443 оставались
@@ -1428,7 +1634,9 @@ impl SemanticParser {
                         let acl = tokens.get(5).map(|s| s.to_string());
                         let overload = tokens.contains(&"overload");
 
-                        let (pool, iface_overload) = if let Some(pool_pos) = tokens.iter().position(|&t| t == "pool") {
+                        let (pool, iface_overload) = if let Some(pool_pos) =
+                            tokens.iter().position(|&t| t == "pool")
+                        {
                             match tokens.get(pool_pos + 1) {
                                 Some(pool_name) => {
                                     match nat_pools.get(*pool_name) {
@@ -1455,13 +1663,16 @@ impl SemanticParser {
                                                 ),
                                                 Some("Найди определение пула в конфиге (возможно в другом файле/секции) и задай адреса вручную"),
                                             );
-                                            (Some(NatPool {
-                                                name: pool_name.to_string(),
-                                                start: "0.0.0.0".parse().unwrap(),
-                                                end: "0.0.0.0".parse().unwrap(),
-                                                prefix: None,
-                                                overload,
-                                            }), false)
+                                            (
+                                                Some(NatPool {
+                                                    name: pool_name.to_string(),
+                                                    start: "0.0.0.0".parse().unwrap(),
+                                                    end: "0.0.0.0".parse().unwrap(),
+                                                    prefix: None,
+                                                    overload,
+                                                }),
+                                                false,
+                                            )
                                         }
                                     }
                                 }
@@ -1474,7 +1685,11 @@ impl SemanticParser {
                         };
 
                         cfg.nat.push(NatRule {
-                            rule_type: if overload || iface_overload { NatType::Overload } else { NatType::Dynamic },
+                            rule_type: if overload || iface_overload {
+                                NatType::Overload
+                            } else {
+                                NatType::Dynamic
+                            },
                             acl,
                             pool,
                             interface_overload: iface_overload,
@@ -1482,7 +1697,7 @@ impl SemanticParser {
                         });
                     }
                     Some(&"static") => {
-                        let local  = tokens.get(5).and_then(|s| s.parse().ok());
+                        let local = tokens.get(5).and_then(|s| s.parse().ok());
                         let global = tokens.get(6).and_then(|s| s.parse().ok());
                         if let (Some(l), Some(g)) = (local, global) {
                             cfg.nat.push(NatRule {
@@ -1514,7 +1729,6 @@ impl SemanticParser {
         }
     }
 
-
     // -----------------------------------------------------------------------
     // VLAN
     // -----------------------------------------------------------------------
@@ -1523,13 +1737,21 @@ impl SemanticParser {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
         let id: u16 = tokens.get(1)?.parse().ok()?;
 
-        let mut vlan = Vlan { id, name: None, active: true };
+        let mut vlan = Vlan {
+            id,
+            name: None,
+            active: true,
+        };
 
         for child in &node.children {
             let ct: Vec<&str> = child.text.split_whitespace().collect();
             match ct.first() {
-                Some(&"name") => { vlan.name = ct.get(1).map(|s| s.to_string()); }
-                Some(&"state") => { vlan.active = ct.get(1) != Some(&"suspend"); }
+                Some(&"name") => {
+                    vlan.name = ct.get(1).map(|s| s.to_string());
+                }
+                Some(&"state") => {
+                    vlan.active = ct.get(1) != Some(&"suspend");
+                }
                 _ => {}
             }
         }
@@ -1549,10 +1771,14 @@ impl SemanticParser {
                     cfg.ntp.push(NtpServer {
                         address: ip,
                         prefer: tokens.contains(&"prefer"),
-                        key: tokens.iter().position(|&t| t == "key")
+                        key: tokens
+                            .iter()
+                            .position(|&t| t == "key")
                             .and_then(|i| tokens.get(i + 1))
                             .and_then(|s| s.parse().ok()),
-                        source_interface: tokens.iter().position(|&t| t == "source")
+                        source_interface: tokens
+                            .iter()
+                            .position(|&t| t == "source")
                             .and_then(|i| tokens.get(i + 1))
                             .map(|s| s.to_string()),
                     });
@@ -1562,7 +1788,12 @@ impl SemanticParser {
         }
     }
 
-    fn handle_named_acl(&self, node: &RawNode, cfg: &mut NetworkConfig, report: &mut ConversionReport) {
+    fn handle_named_acl(
+        &self,
+        node: &RawNode,
+        cfg: &mut NetworkConfig,
+        report: &mut ConversionReport,
+    ) {
         self.handle_acl_global(node, cfg, report);
     }
 
@@ -1621,10 +1852,18 @@ fn merge_hsrp(existing: &mut HsrpGroup, new: HsrpGroup) {
     if new.virtual_ip != "0.0.0.0".parse::<IpAddr>().unwrap() {
         existing.virtual_ip = new.virtual_ip;
     }
-    if new.priority.is_some() { existing.priority = new.priority; }
-    if new.preempt { existing.preempt = true; }
-    if new.preempt_delay.is_some() { existing.preempt_delay = new.preempt_delay; }
-    if new.timers.is_some() { existing.timers = new.timers; }
+    if new.priority.is_some() {
+        existing.priority = new.priority;
+    }
+    if new.preempt {
+        existing.preempt = true;
+    }
+    if new.preempt_delay.is_some() {
+        existing.preempt_delay = new.preempt_delay;
+    }
+    if new.timers.is_some() {
+        existing.timers = new.timers;
+    }
     existing.track.extend(new.track);
 }
 
@@ -1632,7 +1871,9 @@ fn mask_to_prefix_len(mask: IpAddr) -> Option<u8> {
     match mask {
         IpAddr::V4(m) => {
             let bits = u32::from(m);
-            if bits == 0 { return Some(0); }
+            if bits == 0 {
+                return Some(0);
+            }
             // Проверяем что маска непрерывная
             let trailing = bits.trailing_zeros();
             if bits.wrapping_shl(trailing) == u32::MAX.wrapping_shl(32 - (32 - trailing)) {
@@ -1654,7 +1895,8 @@ fn wildcard_to_prefix(addr: IpAddr, wildcard: IpAddr) -> IpNet {
             let prefix_len = mask_bits.leading_ones() as u8;
             let network = u32::from(a) & mask_bits;
             let net_addr = std::net::Ipv4Addr::from(network);
-            format!("{}/{}", net_addr, prefix_len).parse()
+            format!("{}/{}", net_addr, prefix_len)
+                .parse()
                 .unwrap_or_else(|_| "0.0.0.0/0".parse().unwrap())
         }
         _ => "0.0.0.0/0".parse().unwrap(),
@@ -1680,11 +1922,21 @@ fn parse_vlan_list(s: &str) -> Vec<u16> {
 fn port_name_to_num(s: &str) -> Option<u16> {
     // Основные well-known порты по имени
     match s {
-        "ftp-data" => Some(20), "ftp" => Some(21), "ssh" => Some(22),
-        "telnet" => Some(23), "smtp" => Some(25), "dns" => Some(53),
-        "www" | "http" => Some(80), "pop3" => Some(110), "ntp" => Some(123),
-        "https" => Some(443), "bgp" => Some(179), "ldap" => Some(389),
-        "snmp" => Some(161), "syslog" => Some(514), "rdp" => Some(3389),
+        "ftp-data" => Some(20),
+        "ftp" => Some(21),
+        "ssh" => Some(22),
+        "telnet" => Some(23),
+        "smtp" => Some(25),
+        "dns" => Some(53),
+        "www" | "http" => Some(80),
+        "pop3" => Some(110),
+        "ntp" => Some(123),
+        "https" => Some(443),
+        "bgp" => Some(179),
+        "ldap" => Some(389),
+        "snmp" => Some(161),
+        "syslog" => Some(514),
+        "rdp" => Some(3389),
         _ => s.parse().ok(),
     }
 }
@@ -1708,12 +1960,14 @@ impl SemanticParser {
             Some(&"mode") => {
                 stp.mode = match tokens.get(2) {
                     Some(&"rapid-pvst") => StpMode::RapidPvst,
-                    Some(&"pvst")       => StpMode::Pvst,
-                    Some(&"mst")        => StpMode::Mst,
-                    _                   => StpMode::RapidPvst,
+                    Some(&"pvst") => StpMode::Pvst,
+                    Some(&"mst") => StpMode::Mst,
+                    _ => StpMode::RapidPvst,
                 };
             }
-            Some(&"loopguard") => { stp.loopguard = true; }
+            Some(&"loopguard") => {
+                stp.loopguard = true;
+            }
             Some(&"portfast") if tokens.get(2) == Some(&"default") => {
                 stp.portfast_default = true;
             }
@@ -1725,7 +1979,8 @@ impl SemanticParser {
                 if let Some(prio_pos) = tokens.iter().position(|&t| t == "priority") {
                     if let Some(priority) = tokens.get(prio_pos + 1).and_then(|s| s.parse().ok()) {
                         let vlans = parse_vlan_list(tokens.get(2).unwrap_or(&""));
-                        stp.vlan_priorities.push(StpVlanPriority { vlans, priority });
+                        stp.vlan_priorities
+                            .push(StpVlanPriority { vlans, priority });
                     }
                 }
             }
@@ -1737,15 +1992,22 @@ impl SemanticParser {
         // username root privilege 15 password 7 HASH
         // username root privilege 15 secret 5 HASH
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
-        if tokens.len() < 2 { return; }
+        if tokens.len() < 2 {
+            return;
+        }
 
         let name = tokens[1].to_string();
-        let privilege: u8 = tokens.iter().position(|&t| t == "privilege")
+        let privilege: u8 = tokens
+            .iter()
+            .position(|&t| t == "privilege")
             .and_then(|i| tokens.get(i + 1))
             .and_then(|s| s.parse().ok())
             .unwrap_or(1);
 
-        let (pw_type, pw_hash) = if let Some(pos) = tokens.iter().position(|&t| t == "secret" || t == "password") {
+        let (pw_type, pw_hash) = if let Some(pos) = tokens
+            .iter()
+            .position(|&t| t == "secret" || t == "password")
+        {
             let type_indicator = tokens.get(pos + 1).copied().unwrap_or("0");
             let hash = tokens.get(pos + 2).copied().unwrap_or("").to_string();
             let pw_type = match (tokens[pos], type_indicator) {
@@ -1759,7 +2021,12 @@ impl SemanticParser {
             (PasswordType::Plaintext, String::new())
         };
 
-        cfg.users.push(LocalUser { name, privilege, password_type: pw_type, password_hash: pw_hash });
+        cfg.users.push(LocalUser {
+            name,
+            privilege,
+            password_type: pw_type,
+            password_hash: pw_hash,
+        });
     }
 
     pub fn handle_logging(&self, node: &RawNode, cfg: &mut NetworkConfig) {
@@ -1789,7 +2056,9 @@ impl SemanticParser {
     pub fn handle_line(&self, node: &RawNode, cfg: &mut NetworkConfig) {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
         // line vty 0 4 / line vty 5 15
-        if tokens.get(1) != Some(&"vty") { return; }
+        if tokens.get(1) != Some(&"vty") {
+            return;
+        }
 
         let vty = cfg.line_vty.get_or_insert(LineVty {
             exec_timeout_min: 10,
@@ -1822,11 +2091,13 @@ impl SemanticParser {
         let tokens: Vec<&str> = node.text.split_whitespace().collect();
         // aaa new-model — просто фиксируем факт
         if tokens.get(1) == Some(&"new-model") {
-            cfg.aaa.get_or_insert(AaaConfig {
-                new_model: true,
-                authentication: vec![],
-                authorization: vec![],
-            }).new_model = true;
+            cfg.aaa
+                .get_or_insert(AaaConfig {
+                    new_model: true,
+                    authentication: vec![],
+                    authorization: vec![],
+                })
+                .new_model = true;
         }
         // aaa authentication/authorization — пропускаем в platform_specific
         // т.к. на VRP это принципиально другая подсистема

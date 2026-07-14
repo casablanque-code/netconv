@@ -34,13 +34,18 @@ where
     P: ConfigParser,
     R: ConfigRenderer,
 {
-    let (ir, mut report) = parser.parse(input)
+    let (ir, mut report) = parser
+        .parse(input)
         .map_err(|e| ConvertError::ParseError(format!("{:?}", e)))?;
 
-    let output = renderer.render(&ir, &mut report)
+    let output = renderer
+        .render(&ir, &mut report)
         .map_err(|e| ConvertError::RenderError(format!("{:?}", e)))?;
 
-    Ok(ConversionOutput { config_text: output, report })
+    Ok(ConversionOutput {
+        config_text: output,
+        report,
+    })
 }
 
 /// Тот же пайплайн что и `convert`, но дополнительно сверяет разобранный
@@ -60,15 +65,20 @@ where
     P: ConfigParser,
     R: ConfigRenderer,
 {
-    let (ir, mut report) = parser.parse(input)
+    let (ir, mut report) = parser
+        .parse(input)
         .map_err(|e| ConvertError::ParseError(format!("{:?}", e)))?;
 
     report.domain_mismatches = detect_domain_mismatches(&ir, profile);
 
-    let output = renderer.render(&ir, &mut report)
+    let output = renderer
+        .render(&ir, &mut report)
         .map_err(|e| ConvertError::RenderError(format!("{:?}", e)))?;
 
-    Ok(ConversionOutput { config_text: output, report })
+    Ok(ConversionOutput {
+        config_text: output,
+        report,
+    })
 }
 
 #[derive(Debug)]
@@ -86,7 +96,7 @@ pub enum ConvertError {
 impl std::fmt::Display for ConvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConvertError::ParseError(e)  => write!(f, "Parse error: {}", e),
+            ConvertError::ParseError(e) => write!(f, "Parse error: {}", e),
             ConvertError::RenderError(e) => write!(f, "Render error: {}", e),
         }
     }

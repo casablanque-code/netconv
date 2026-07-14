@@ -55,15 +55,33 @@ fn l2_renderer_emits_vlan_and_switchport_only() {
         .expect("switch config should convert under VrpL2Renderer");
     let cfg = &output.config_text;
 
-    assert!(cfg.contains("vlan 10"), "VLAN 10 должен присутствовать в L2-выводе");
-    assert!(cfg.contains("port link-type access"), "access-порт должен быть отрендерен");
-    assert!(cfg.contains("port link-type trunk"), "trunk-порт должен быть отрендерен");
-    assert!(cfg.contains("stp edged-port enable"), "portfast -> stp edged-port enable");
+    assert!(
+        cfg.contains("vlan 10"),
+        "VLAN 10 должен присутствовать в L2-выводе"
+    );
+    assert!(
+        cfg.contains("port link-type access"),
+        "access-порт должен быть отрендерен"
+    );
+    assert!(
+        cfg.contains("port link-type trunk"),
+        "trunk-порт должен быть отрендерен"
+    );
+    assert!(
+        cfg.contains("stp edged-port enable"),
+        "portfast -> stp edged-port enable"
+    );
 
     // Чужой домен не должен просочиться — в исходнике его и нет, но это
     // всё равно фиксирует границу поведения рендерера явно.
-    assert!(!cfg.contains("ospf"), "L2-вывод не должен содержать routing");
-    assert!(!cfg.contains("traffic-filter"), "L2-вывод не должен содержать ACL");
+    assert!(
+        !cfg.contains("ospf"),
+        "L2-вывод не должен содержать routing"
+    );
+    assert!(
+        !cfg.contains("traffic-filter"),
+        "L2-вывод не должен содержать ACL"
+    );
 }
 
 #[test]
@@ -72,14 +90,26 @@ fn l3_renderer_emits_routing_acl_addressing_only() {
         .expect("router config should convert under VrpL3Renderer");
     let cfg = &output.config_text;
 
-    assert!(cfg.contains("ip address 203.0.113.2"), "адресация должна быть отрендерена");
+    assert!(
+        cfg.contains("ip address 203.0.113.2"),
+        "адресация должна быть отрендерена"
+    );
     assert!(cfg.contains("ospf"), "OSPF должен быть отрендерен");
     assert!(cfg.contains("acl"), "ACL должен быть отрендерен");
-    assert!(cfg.contains("ip route-static"), "статический маршрут должен быть отрендерен");
+    assert!(
+        cfg.contains("ip route-static"),
+        "статический маршрут должен быть отрендерен"
+    );
 
     // Чужой домен (VLAN/switchport) не должен просочиться
-    assert!(!cfg.contains("vlan "), "L3-вывод не должен содержать VLAN database");
-    assert!(!cfg.contains("port link-type"), "L3-вывод не должен содержать switchport");
+    assert!(
+        !cfg.contains("vlan "),
+        "L3-вывод не должен содержать VLAN database"
+    );
+    assert!(
+        !cfg.contains("port link-type"),
+        "L3-вывод не должен содержать switchport"
+    );
 }
 
 #[test]
@@ -90,8 +120,14 @@ fn l3_renderer_drops_l2_content_present_in_source() {
         .expect("mixed-domain source should still render under L3 profile");
     let cfg = &output.config_text;
 
-    assert!(!cfg.contains("port link-type"), "L3-профиль обязан игнорировать switchport из входа");
-    assert!(!cfg.contains("vlan 10\n"), "L3-профиль обязан игнорировать VLAN database из входа");
+    assert!(
+        !cfg.contains("port link-type"),
+        "L3-профиль обязан игнорировать switchport из входа"
+    );
+    assert!(
+        !cfg.contains("vlan 10\n"),
+        "L3-профиль обязан игнорировать VLAN database из входа"
+    );
 }
 
 #[test]

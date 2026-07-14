@@ -1,10 +1,10 @@
 use clap::Parser;
 use netconv_core::profile::DeviceProfile;
-use netconv_core::traits::{convert, convert_with_profile};
 use netconv_core::report::Severity;
+use netconv_core::traits::{convert, convert_with_profile};
 use netconv_parser_ios::IosParser;
-use netconv_render_vrp::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
-use netconv_render_eltex::{EltexRenderer, EltexL2Renderer, EltexL3Renderer};
+use netconv_render_eltex::{EltexL2Renderer, EltexL3Renderer, EltexRenderer};
+use netconv_render_vrp::{VrpL2Renderer, VrpL3Renderer, VrpRenderer};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -82,12 +82,18 @@ fn main() {
         }
         ("ios", "vrp", None) => convert(&IosParser, &VrpRenderer, &input),
         // ios -> eltex: теперь тоже разделён на l2 (MES) / l3 (ESR)
-        ("ios", "eltex", Some(DeviceProfile::L2Switch)) => {
-            convert_with_profile(&IosParser, &EltexL2Renderer, &input, DeviceProfile::L2Switch)
-        }
-        ("ios", "eltex", Some(DeviceProfile::L3Router)) => {
-            convert_with_profile(&IosParser, &EltexL3Renderer, &input, DeviceProfile::L3Router)
-        }
+        ("ios", "eltex", Some(DeviceProfile::L2Switch)) => convert_with_profile(
+            &IosParser,
+            &EltexL2Renderer,
+            &input,
+            DeviceProfile::L2Switch,
+        ),
+        ("ios", "eltex", Some(DeviceProfile::L3Router)) => convert_with_profile(
+            &IosParser,
+            &EltexL3Renderer,
+            &input,
+            DeviceProfile::L3Router,
+        ),
         ("ios", "eltex", None) => convert(&IosParser, &EltexRenderer, &input),
         (src, tgt, _) => {
             eprintln!("Пара {}->{} пока не поддерживается.", src, tgt);
@@ -124,7 +130,11 @@ fn main() {
     eprintln!(" netconv: {} → {}", r.source_vendor, r.target_vendor);
     eprintln!("─────────────────────────────────────────");
     eprintln!(" Всего команд:           {}", r.summary.total_commands);
-    eprintln!(" ✓ Точно:                {} ({:.0}%)", r.summary.exact, r.summary.exact_pct());
+    eprintln!(
+        " ✓ Точно:                {} ({:.0}%)",
+        r.summary.exact,
+        r.summary.exact_pct()
+    );
     eprintln!(" ⚠ С допущениями:        {}", r.summary.approximate);
     eprintln!(" ✗ Требует решения:      {}", r.summary.manual_required);
     eprintln!(" ? Нераспознано:         {}", r.summary.unknown);
@@ -139,10 +149,16 @@ fn main() {
                 eprintln!(" [{}] {}", m.domain, m.detail);
             }
             if args.to == "vrp" || args.to == "eltex" {
-                eprintln!(" Эти команды НЕ попали в выходной конфиг — рендерер {} уже", args.to);
+                eprintln!(
+                    " Эти команды НЕ попали в выходной конфиг — рендерер {} уже",
+                    args.to
+                );
                 eprintln!(" фильтрует по профилю. Оригинал остался только в источнике.");
             } else {
-                eprintln!(" Рендерер {} пока не фильтрует по профилю — эти команды всё ещё", args.to);
+                eprintln!(
+                    " Рендерер {} пока не фильтрует по профилю — эти команды всё ещё",
+                    args.to
+                );
                 eprintln!(" присутствуют в выходном конфиге (см. roadmap: разделение l2/l3).");
             }
             eprintln!("─────────────────────────────────────────");
@@ -151,16 +167,20 @@ fn main() {
 
     if args.json {
         // Сериализуем репорт в JSON
-        let items: Vec<serde_json::Value> = r.items.iter().map(|item| {
-            serde_json::json!({
-                "severity": format!("{:?}", item.severity),
-                "category": item.category,
-                "source": item.source_snippet,
-                "target": item.target_snippet,
-                "message": item.message,
-                "recommendation": item.recommendation,
+        let items: Vec<serde_json::Value> = r
+            .items
+            .iter()
+            .map(|item| {
+                serde_json::json!({
+                    "severity": format!("{:?}", item.severity),
+                    "category": item.category,
+                    "source": item.source_snippet,
+                    "target": item.target_snippet,
+                    "message": item.message,
+                    "recommendation": item.recommendation,
+                })
             })
-        }).collect();
+            .collect();
 
         let json = serde_json::json!({
             "summary": {
@@ -191,10 +211,10 @@ fn main() {
             eprintln!();
             for item in items {
                 let icon = match item.severity {
-                    Severity::Ok    => "✓",
-                    Severity::Warn  => "⚠",
+                    Severity::Ok => "✓",
+                    Severity::Warn => "⚠",
                     Severity::Error => "✗",
-                    Severity::Info  => "?",
+                    Severity::Info => "?",
                 };
                 eprintln!("{} [{}] {}", icon, item.category, item.message);
                 eprintln!("  Было: {}", item.source_snippet);
@@ -209,10 +229,16 @@ fn main() {
         }
     } else {
         if r.summary.manual_required > 0 {
-            eprintln!("\n⚠ {} команд требуют ручного решения. Запусти с --warnings для деталей.", r.summary.manual_required);
+            eprintln!(
+                "\n⚠ {} команд требуют ручного решения. Запусти с --warnings для деталей.",
+                r.summary.manual_required
+            );
         }
         if r.summary.unknown > 0 {
-            eprintln!("? {} нераспознанных команд сохранены как комментарии.", r.summary.unknown);
+            eprintln!(
+                "? {} нераспознанных команд сохранены как комментарии.",
+                r.summary.unknown
+            );
         }
     }
 }

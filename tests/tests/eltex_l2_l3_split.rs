@@ -51,13 +51,31 @@ fn l2_renderer_emits_vlan_database_and_switchport_only() {
     let cfg = &output.config_text;
 
     assert!(cfg.contains("vlan database"), "должна быть VLAN database");
-    assert!(cfg.contains("vlan 10 name USERS"), "VLAN 10 с именем должен присутствовать");
-    assert!(cfg.contains("switchport mode access"), "access-порт должен быть отрендерен");
-    assert!(cfg.contains("switchport mode trunk"), "trunk-порт должен быть отрендерен");
-    assert!(cfg.contains("spanning-tree portfast"), "portfast переносится дословно");
+    assert!(
+        cfg.contains("vlan 10 name USERS"),
+        "VLAN 10 с именем должен присутствовать"
+    );
+    assert!(
+        cfg.contains("switchport mode access"),
+        "access-порт должен быть отрендерен"
+    );
+    assert!(
+        cfg.contains("switchport mode trunk"),
+        "trunk-порт должен быть отрендерен"
+    );
+    assert!(
+        cfg.contains("spanning-tree portfast"),
+        "portfast переносится дословно"
+    );
 
-    assert!(!cfg.contains("security zone"), "L2-вывод не должен содержать security zones (ESR-специфика)");
-    assert!(!cfg.contains("router ospf") && !cfg.contains(" ospf "), "L2-вывод не должен содержать routing");
+    assert!(
+        !cfg.contains("security zone"),
+        "L2-вывод не должен содержать security zones (ESR-специфика)"
+    );
+    assert!(
+        !cfg.contains("router ospf") && !cfg.contains(" ospf "),
+        "L2-вывод не должен содержать routing"
+    );
 }
 
 #[test]
@@ -66,11 +84,23 @@ fn l3_renderer_emits_addressing_routing_zones_only() {
         .expect("router config should convert under EltexL3Renderer");
     let cfg = &output.config_text;
 
-    assert!(cfg.contains("ip address 203.0.113.2"), "адресация должна быть отрендерена");
-    assert!(cfg.contains("security zone") || cfg.contains("zone "), "ESR-профиль должен содержать security zones");
+    assert!(
+        cfg.contains("ip address 203.0.113.2"),
+        "адресация должна быть отрендерена"
+    );
+    assert!(
+        cfg.contains("security zone") || cfg.contains("zone "),
+        "ESR-профиль должен содержать security zones"
+    );
 
-    assert!(!cfg.contains("vlan database"), "L3-вывод не должен содержать VLAN database");
-    assert!(!cfg.contains("switchport"), "L3-вывод не должен содержать switchport");
+    assert!(
+        !cfg.contains("vlan database"),
+        "L3-вывод не должен содержать VLAN database"
+    );
+    assert!(
+        !cfg.contains("switchport"),
+        "L3-вывод не должен содержать switchport"
+    );
 }
 
 #[test]
@@ -79,8 +109,14 @@ fn l2_renderer_drops_l3_content_present_in_mixed_source() {
         .expect("router-only source should still render under L2 profile");
     let cfg = &output.config_text;
 
-    assert!(!cfg.contains("security zone"), "L2-профиль обязан игнорировать security zones");
-    assert!(!cfg.contains("router ospf"), "L2-профиль обязан игнорировать routing");
+    assert!(
+        !cfg.contains("security zone"),
+        "L2-профиль обязан игнорировать security zones"
+    );
+    assert!(
+        !cfg.contains("router ospf"),
+        "L2-профиль обязан игнорировать routing"
+    );
 }
 
 #[test]

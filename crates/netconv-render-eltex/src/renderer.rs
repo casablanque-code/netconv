@@ -1,13 +1,13 @@
-use netconv_core::ir::NetworkConfig;
-use netconv_core::report::ConversionReport;
-use netconv_core::traits::ConfigRenderer;
-use crate::system::render_system;
+use crate::acl::render_acls;
 use crate::iface::render_interfaces as render_interfaces_l3;
 use crate::iface_l2::render_interfaces as render_interfaces_l2;
 use crate::routing::render_routing;
 use crate::security::render_security_zones;
-use crate::acl::render_acls;
+use crate::system::render_system;
 use crate::vlan::render_vlans;
+use netconv_core::ir::NetworkConfig;
+use netconv_core::report::ConversionReport;
+use netconv_core::traits::ConfigRenderer;
 
 /// Прежнее имя, прежнее поведение — Eltex ESR (router/firewall).
 /// Оставлен ради обратной совместимости с вызовами `--to eltex` без
@@ -29,7 +29,11 @@ pub struct EltexL3Renderer;
 impl ConfigRenderer for EltexRenderer {
     type Error = EltexRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
         Ok(render_body_l3(config, report))
     }
 
@@ -41,7 +45,11 @@ impl ConfigRenderer for EltexRenderer {
 impl ConfigRenderer for EltexL3Renderer {
     type Error = EltexRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
         Ok(render_body_l3(config, report))
     }
 
@@ -53,7 +61,11 @@ impl ConfigRenderer for EltexL3Renderer {
 impl ConfigRenderer for EltexL2Renderer {
     type Error = EltexRenderError;
 
-    fn render(&self, config: &NetworkConfig, report: &mut ConversionReport) -> Result<String, Self::Error> {
+    fn render(
+        &self,
+        config: &NetworkConfig,
+        report: &mut ConversionReport,
+    ) -> Result<String, Self::Error> {
         Ok(render_body_l2(config, report))
     }
 
@@ -143,7 +155,9 @@ fn render_body_l2(config: &NetworkConfig, report: &mut ConversionReport) -> Stri
     out.push("! Source: Cisco IOS → Target: Eltex MES".to_string());
     out.push("!".to_string());
     out.push("! NOTE: MES switch family (14xx/24xx vs 23xx/33xx/53xx) affects exact".to_string());
-    out.push("! VLAN-entry and port-numbering syntax — see per-item notes in the report.".to_string());
+    out.push(
+        "! VLAN-entry and port-numbering syntax — see per-item notes in the report.".to_string(),
+    );
     out.push("!".to_string());
     out.push(String::new());
 

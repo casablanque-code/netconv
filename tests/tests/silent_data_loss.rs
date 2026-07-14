@@ -44,7 +44,9 @@ end
 /// содержащий нужную подстроку.
 fn report_mentions(report: &netconv_core::report::ConversionReport, needle: &str) -> bool {
     report.items.iter().any(|i| {
-        i.source_snippet.to_lowercase().contains(&needle.to_lowercase())
+        i.source_snippet
+            .to_lowercase()
+            .contains(&needle.to_lowercase())
             || i.message.to_lowercase().contains(&needle.to_lowercase())
     })
 }
@@ -54,7 +56,10 @@ fn vrp_banner_is_not_silently_dropped() {
     let output = convert(&IosParser, &VrpRenderer, CONFIG_WITH_BANNER_DNS_LINE)
         .expect("conversion should succeed");
 
-    let banner_in_output = output.config_text.to_lowercase().contains("authorized access only");
+    let banner_in_output = output
+        .config_text
+        .to_lowercase()
+        .contains("authorized access only");
     let banner_in_report = report_mentions(&output.report, "banner");
 
     assert!(
@@ -70,7 +75,10 @@ fn eltex_banner_is_not_silently_dropped() {
     let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_BANNER_DNS_LINE)
         .expect("conversion should succeed");
 
-    let banner_in_output = output.config_text.to_lowercase().contains("authorized access only");
+    let banner_in_output = output
+        .config_text
+        .to_lowercase()
+        .contains("authorized access only");
     let banner_in_report = report_mentions(&output.report, "banner");
 
     assert!(
@@ -86,8 +94,10 @@ fn eltex_dns_is_not_silently_dropped() {
     let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_BANNER_DNS_LINE)
         .expect("conversion should succeed");
 
-    let dns_in_output = output.config_text.contains("8.8.8.8") || output.config_text.contains("1.1.1.1");
-    let dns_in_report = report_mentions(&output.report, "name-server") || report_mentions(&output.report, "dns");
+    let dns_in_output =
+        output.config_text.contains("8.8.8.8") || output.config_text.contains("1.1.1.1");
+    let dns_in_report =
+        report_mentions(&output.report, "name-server") || report_mentions(&output.report, "dns");
 
     assert!(
         dns_in_output || dns_in_report,
@@ -127,6 +137,13 @@ fn vrp_report_has_entries_for_each_top_level_config_section() {
     let output = convert(&IosParser, &VrpRenderer, CONFIG_WITH_BANNER_DNS_LINE)
         .expect("conversion should succeed");
 
-    let has_any_non_info = output.report.items.iter().any(|i| i.severity != Severity::Info);
-    assert!(has_any_non_info, "report should contain at least some Ok/Warn/Error items, not just Info/unknown");
+    let has_any_non_info = output
+        .report
+        .items
+        .iter()
+        .any(|i| i.severity != Severity::Info);
+    assert!(
+        has_any_non_info,
+        "report should contain at least some Ok/Warn/Error items, not just Info/unknown"
+    );
 }

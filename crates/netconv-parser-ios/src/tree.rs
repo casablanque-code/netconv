@@ -55,7 +55,9 @@ pub fn parse_raw_tree(input: &str) -> RawTree {
 
     for (line_num, line) in input.lines().enumerate() {
         let trimmed_end = line.trim_end();
-        if trimmed_end.is_empty() { continue; }
+        if trimmed_end.is_empty() {
+            continue;
+        }
 
         let stripped = trimmed_end.trim_start_matches('!');
         if stripped.trim().is_empty() || trimmed_end.trim_start().starts_with('!') {

@@ -2,7 +2,8 @@ use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
 
 pub fn render_vlans(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let mut all_vlans: std::collections::BTreeMap<u16, Option<String>> = std::collections::BTreeMap::new();
+    let mut all_vlans: std::collections::BTreeMap<u16, Option<String>> =
+        std::collections::BTreeMap::new();
 
     // Собираем из явных vlan блоков
     for vlan in &cfg.vlans {
@@ -28,17 +29,24 @@ pub fn render_vlans(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Con
 
     all_vlans.remove(&1); // VLAN 1 существует по умолчанию
 
-    if all_vlans.is_empty() { return; }
+    if all_vlans.is_empty() {
+        return;
+    }
 
     // Разделяем на voice и data VLAN для MSTP heuristic
-    let voice_vlans: Vec<u16> = cfg.interfaces.iter()
+    let voice_vlans: Vec<u16> = cfg
+        .interfaces
+        .iter()
         .filter_map(|i| i.voice_vlan)
         .collect::<std::collections::BTreeSet<_>>()
-        .into_iter().collect();
+        .into_iter()
+        .collect();
 
-    let data_vlans: Vec<u16> = all_vlans.keys()
+    let data_vlans: Vec<u16> = all_vlans
+        .keys()
         .filter(|v| !voice_vlans.contains(v))
-        .copied().collect();
+        .copied()
+        .collect();
 
     out.push("#".to_string());
 
@@ -72,7 +80,10 @@ pub fn render_vlans(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Con
                 if voice_vlans.contains(id) {
                     out.push("#".to_string());
                     out.push(format!("vlan {}", id));
-                    out.push(format!(" # INFO: VLAN {} used as voice VLAN (no name in source config)", id));
+                    out.push(format!(
+                        " # INFO: VLAN {} used as voice VLAN (no name in source config)",
+                        id
+                    ));
                 }
             }
         }
@@ -94,14 +105,26 @@ fn render_mstp_suggestion(
     out: &mut Vec<String>,
     report: &mut ConversionReport,
 ) {
-    let is_pvst = cfg.stp.as_ref()
+    let is_pvst = cfg
+        .stp
+        .as_ref()
         .map(|s| matches!(s.mode, StpMode::RapidPvst | StpMode::Pvst))
         .unwrap_or(false);
 
-    if !is_pvst || (data_vlans.is_empty() && voice_vlans.is_empty()) { return; }
+    if !is_pvst || (data_vlans.is_empty() && voice_vlans.is_empty()) {
+        return;
+    }
 
-    let data_str = data_vlans.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" ");
-    let voice_str = voice_vlans.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(" ");
+    let data_str = data_vlans
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let voice_str = voice_vlans
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
 
     out.push("#".to_string());
     out.push("# ── MSTP STARTING POINT (auto-generated heuristic) ─────────────".to_string());

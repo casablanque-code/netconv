@@ -2,7 +2,9 @@ use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
 
 pub fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.nat.is_empty() { return; }
+    if cfg.nat.is_empty() {
+        return;
+    }
 
     out.push("#".to_string());
     out.push("# NAT configuration".to_string());
@@ -13,8 +15,8 @@ pub fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conve
     for (i, rule) in cfg.nat.iter().enumerate() {
         match &rule.rule_type {
             NatType::Overload => render_nat_overload(rule, i, cfg, out, report),
-            NatType::Dynamic  => render_nat_dynamic(rule, i, out, report),
-            NatType::Static   => render_nat_static(rule, out, report),
+            NatType::Dynamic => render_nat_dynamic(rule, i, out, report),
+            NatType::Static => render_nat_static(rule, out, report),
         }
     }
 }
@@ -32,7 +34,9 @@ fn render_nat_overload(
     let acl_ref = rule.acl.as_deref().unwrap_or("ACL_UNKNOWN");
 
     // Находим WAN интерфейс (nat outside)
-    let wan_iface = cfg.interfaces.iter()
+    let wan_iface = cfg
+        .interfaces
+        .iter()
         .find(|i| i.nat_direction == Some(NatDirection::Outside))
         .map(|i| crate::iface::ios_to_vrp_ifname(&i.name));
 
@@ -43,17 +47,26 @@ fn render_nat_overload(
             out.push(format!(" nat outbound {}", acl_ref));
             report.add_approximate(
                 "nat.overload",
-                &format!("ip nat inside source list {} interface <WAN> overload", acl_ref),
+                &format!(
+                    "ip nat inside source list {} interface <WAN> overload",
+                    acl_ref
+                ),
                 &format!("interface <WAN>\n nat outbound {}", acl_ref),
                 "VRP NAT overload: 'nat outbound <acl>' на WAN интерфейсе. \
                  Также требуется 'nat enable' глобально.",
             );
         } else {
-            out.push(format!("# MANUAL: ip nat inside source list {} interface <WAN> overload", acl_ref));
+            out.push(format!(
+                "# MANUAL: ip nat inside source list {} interface <WAN> overload",
+                acl_ref
+            ));
             out.push("# Определи WAN интерфейс и добавь 'nat outbound <acl>' на него".to_string());
             report.add_manual(
                 "nat.overload",
-                &format!("ip nat inside source list {} interface <WAN> overload", acl_ref),
+                &format!(
+                    "ip nat inside source list {} interface <WAN> overload",
+                    acl_ref
+                ),
                 "WAN интерфейс не определён однозначно",
                 Some("Добавь 'nat outbound <acl>' на WAN интерфейс вручную"),
             );
@@ -62,11 +75,20 @@ fn render_nat_overload(
         // NAT с пулом + overload
         let pool_start = pool.start;
         let pool_end = pool.end;
-        out.push(format!("nat address-group {} {} {} no-pat", idx, pool_start, pool_end));
-        out.push(format!("# На WAN интерфейсе: nat outbound {} address-group {}", acl_ref, idx));
+        out.push(format!(
+            "nat address-group {} {} {} no-pat",
+            idx, pool_start, pool_end
+        ));
+        out.push(format!(
+            "# На WAN интерфейсе: nat outbound {} address-group {}",
+            acl_ref, idx
+        ));
         report.add_approximate(
             "nat.pool_overload",
-            &format!("ip nat pool {} {} {} ... / ip nat inside source list {} pool {}", pool.name, pool_start, pool_end, acl_ref, pool.name),
+            &format!(
+                "ip nat pool {} {} {} ... / ip nat inside source list {} pool {}",
+                pool.name, pool_start, pool_end, acl_ref, pool.name
+            ),
             &format!("nat address-group {} {} {}", idx, pool_start, pool_end),
             "VRP: address-group + nat outbound на интерфейсе. Синтаксис существенно отличается.",
         );
@@ -75,12 +97,23 @@ fn render_nat_overload(
     out.push(String::new());
 }
 
-fn render_nat_dynamic(rule: &NatRule, idx: usize, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_nat_dynamic(
+    rule: &NatRule,
+    idx: usize,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     let acl_ref = rule.acl.as_deref().unwrap_or("ACL_UNKNOWN");
 
     if let Some(pool) = &rule.pool {
-        out.push(format!("nat address-group {} {} {} no-pat", idx, pool.start, pool.end));
-        out.push(format!("# На WAN интерфейсе: nat outbound {} address-group {}", acl_ref, idx));
+        out.push(format!(
+            "nat address-group {} {} {} no-pat",
+            idx, pool.start, pool.end
+        ));
+        out.push(format!(
+            "# На WAN интерфейсе: nat outbound {} address-group {}",
+            acl_ref, idx
+        ));
         report.add_approximate(
             "nat.dynamic",
             &format!("ip nat inside source list {} pool {}", acl_ref, pool.name),
@@ -97,7 +130,9 @@ fn render_nat_static(rule: &NatRule, out: &mut Vec<String>, report: &mut Convers
 
         if let (Some(lport), Some(gport)) = (entry.local_port, entry.global_port) {
             // Port static NAT
-            let proto = entry.protocol.as_ref()
+            let proto = entry
+                .protocol
+                .as_ref()
                 .map(|p| match p {
                     AclProtocol::Tcp => "tcp",
                     AclProtocol::Udp => "udp",
@@ -111,17 +146,27 @@ fn render_nat_static(rule: &NatRule, out: &mut Vec<String>, report: &mut Convers
             ));
             report.add_approximate(
                 "nat.static_port",
-                &format!("ip nat inside source static {} {} {} {} {}",
-                    proto, entry.local, lport, entry.global, gport),
-                &format!("nat static protocol {} global {} {} inside {} {}", proto, entry.global, gport, entry.local, lport),
+                &format!(
+                    "ip nat inside source static {} {} {} {} {}",
+                    proto, entry.local, lport, entry.global, gport
+                ),
+                &format!(
+                    "nat static protocol {} global {} {} inside {} {}",
+                    proto, entry.global, gport, entry.local, lport
+                ),
                 "VRP static port NAT: команда на WAN интерфейсе. Порядок global/inside обратный.",
             );
         } else {
-            out.push(format!("# На WAN интерфейсе: nat static global {} inside {}",
-                entry.global, entry.local));
+            out.push(format!(
+                "# На WAN интерфейсе: nat static global {} inside {}",
+                entry.global, entry.local
+            ));
             report.add_approximate(
                 "nat.static",
-                &format!("ip nat inside source static {} {}", entry.local, entry.global),
+                &format!(
+                    "ip nat inside source static {} {}",
+                    entry.local, entry.global
+                ),
                 &format!("nat static global {} inside {}", entry.global, entry.local),
                 "VRP static NAT: команда на WAN интерфейсе. Порядок: сначала global, потом inside.",
             );

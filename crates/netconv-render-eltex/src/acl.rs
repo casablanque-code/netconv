@@ -16,7 +16,9 @@ use netconv_core::report::ConversionReport;
 /// прецедента в проекте не было — там осознанно выбран Manual, а не
 /// предположение о совпадении синтаксиса.
 pub fn render_acls(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.acls.is_empty() { return; }
+    if cfg.acls.is_empty() {
+        return;
+    }
 
     for acl in &cfg.acls {
         render_acl(acl, out, report);
@@ -69,10 +71,13 @@ fn render_acl(acl: &Acl, out: &mut Vec<String>, report: &mut ConversionReport) {
 }
 
 fn render_acl_entry(entry: &AclEntry, acl_type: &AclType) -> String {
-    let seq = entry.sequence.map(|s| format!("{} ", s)).unwrap_or_default();
+    let seq = entry
+        .sequence
+        .map(|s| format!("{} ", s))
+        .unwrap_or_default();
     let action = match entry.action {
         AclAction::Permit => "permit",
-        AclAction::Deny   => "deny",
+        AclAction::Deny => "deny",
     };
 
     match acl_type {
@@ -81,21 +86,35 @@ fn render_acl_entry(entry: &AclEntry, acl_type: &AclType) -> String {
             format!("{}{} {}", seq, action, src)
         }
         AclType::Extended => {
-            let proto = entry.protocol.as_ref().map(render_protocol).unwrap_or_else(|| "ip".to_string());
+            let proto = entry
+                .protocol
+                .as_ref()
+                .map(render_protocol)
+                .unwrap_or_else(|| "ip".to_string());
             let src = render_acl_match(&entry.src);
-            let src_port = entry.src_port.as_ref()
+            let src_port = entry
+                .src_port
+                .as_ref()
                 .map(|p| format!(" {}", render_port(p)))
                 .unwrap_or_default();
 
-            let dst = entry.dst.as_ref()
+            let dst = entry
+                .dst
+                .as_ref()
                 .map(render_acl_match)
                 .unwrap_or_else(|| "any".to_string());
 
-            let dst_port = entry.dst_port.as_ref()
+            let dst_port = entry
+                .dst_port
+                .as_ref()
                 .map(|p| format!(" {}", render_port(p)))
                 .unwrap_or_default();
 
-            let established = if entry.established { " established" } else { "" };
+            let established = if entry.established {
+                " established"
+            } else {
+                ""
+            };
             let log = if entry.log { " log" } else { "" };
 
             format!(
@@ -120,28 +139,31 @@ fn render_acl_match(m: &AclMatch) -> String {
 
 fn render_protocol(proto: &AclProtocol) -> String {
     match proto {
-        AclProtocol::Ip     => "ip".to_string(),
-        AclProtocol::Tcp    => "tcp".to_string(),
-        AclProtocol::Udp    => "udp".to_string(),
-        AclProtocol::Icmp   => "icmp".to_string(),
-        AclProtocol::Esp    => "esp".to_string(),
-        AclProtocol::Ahp    => "ahp".to_string(),
+        AclProtocol::Ip => "ip".to_string(),
+        AclProtocol::Tcp => "tcp".to_string(),
+        AclProtocol::Udp => "udp".to_string(),
+        AclProtocol::Icmp => "icmp".to_string(),
+        AclProtocol::Esp => "esp".to_string(),
+        AclProtocol::Ahp => "ahp".to_string(),
         AclProtocol::Number(n) => n.to_string(),
     }
 }
 
 fn render_port(port: &AclPort) -> String {
     match port {
-        AclPort::Eq(p)      => format!("eq {}", p),
-        AclPort::Ne(p)      => format!("ne {}", p),
-        AclPort::Lt(p)      => format!("lt {}", p),
-        AclPort::Gt(p)      => format!("gt {}", p),
-        AclPort::Range(a,b) => format!("range {} {}", a, b),
+        AclPort::Eq(p) => format!("eq {}", p),
+        AclPort::Ne(p) => format!("ne {}", p),
+        AclPort::Lt(p) => format!("lt {}", p),
+        AclPort::Gt(p) => format!("gt {}", p),
+        AclPort::Range(a, b) => format!("range {} {}", a, b),
     }
 }
 
 fn format_source_acl_entry(entry: &AclEntry) -> String {
-    let action = match entry.action { AclAction::Permit => "permit", AclAction::Deny => "deny" };
+    let action = match entry.action {
+        AclAction::Permit => "permit",
+        AclAction::Deny => "deny",
+    };
     format!("{} {:?} → {:?}", action, entry.src, entry.dst)
 }
 
@@ -151,7 +173,9 @@ fn format_source_acl_entry(entry: &AclEntry) -> String {
 /// достигается в текущем пайплайне, но типобезопасность должна сохраняться
 /// для будущего IPv6/CIDR-based парсинга.
 fn invert_prefix(net: &ipnet::IpNet) -> std::net::Ipv4Addr {
-    let bits: u32 = if net.prefix_len() == 0 { u32::MAX } else {
+    let bits: u32 = if net.prefix_len() == 0 {
+        u32::MAX
+    } else {
         u32::MAX >> net.prefix_len()
     };
     std::net::Ipv4Addr::from(bits)

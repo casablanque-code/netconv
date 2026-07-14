@@ -34,7 +34,8 @@ ip access-list standard NAT-ACL
 
 #[test]
 fn vrp_nat_pool_uses_real_addresses_not_zero() {
-    let output = convert(&IosParser, &VrpRenderer, CONFIG_WITH_NAT_POOL).expect("conversion should succeed");
+    let output =
+        convert(&IosParser, &VrpRenderer, CONFIG_WITH_NAT_POOL).expect("conversion should succeed");
     assert!(
         !output.config_text.contains("0.0.0.0 0.0.0.0"),
         "VRP output must not contain a zeroed NAT pool:\n{}",
@@ -49,7 +50,8 @@ fn vrp_nat_pool_uses_real_addresses_not_zero() {
 
 #[test]
 fn eltex_nat_pool_uses_real_addresses_not_zero() {
-    let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_NAT_POOL).expect("conversion should succeed");
+    let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_NAT_POOL)
+        .expect("conversion should succeed");
     // ESR dynamic (non-overload) NAT с пулом сейчас осознанно помечается Manual
     // (нет полной поддержки в Eltex рендерере), но если когда-нибудь это
     // изменится, всё равно нельзя допустить тихую подстановку 0.0.0.0.
@@ -84,7 +86,8 @@ ip access-list standard NAT-ACL
 
 #[test]
 fn vrp_nat_pool_overload_uses_real_addresses() {
-    let output = convert(&IosParser, &VrpRenderer, CONFIG_WITH_NAT_POOL_OVERLOAD).expect("conversion should succeed");
+    let output = convert(&IosParser, &VrpRenderer, CONFIG_WITH_NAT_POOL_OVERLOAD)
+        .expect("conversion should succeed");
     assert!(
         !output.config_text.contains("0.0.0.0 0.0.0.0"),
         "VRP NAT overload+pool output must not be zeroed:\n{}",
@@ -115,11 +118,18 @@ fn parser_marks_undefined_pool_reference_as_manual() {
     // отчёт обязан явно пометить это как Manual, а не молча сгенерировать
     // 0.0.0.0 как будто всё в порядке.
     let parser = IosParser;
-    let (cfg, report) = parser.parse(CONFIG_WITH_UNDEFINED_POOL).expect("parse should succeed");
+    let (cfg, report) = parser
+        .parse(CONFIG_WITH_UNDEFINED_POOL)
+        .expect("parse should succeed");
 
     assert_eq!(cfg.nat.len(), 1);
-    let manual_count = report.items.iter()
+    let manual_count = report
+        .items
+        .iter()
         .filter(|i| i.category == "nat.pool_undefined")
         .count();
-    assert_eq!(manual_count, 1, "undefined pool reference must produce exactly one manual report item");
+    assert_eq!(
+        manual_count, 1,
+        "undefined pool reference must produce exactly one manual report item"
+    );
 }

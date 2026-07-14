@@ -5,8 +5,8 @@
 //! это единственная защита от "бесполезной" межуровневой конвертации.
 
 use netconv_core::profile::{detect_domain_mismatches, DeviceProfile};
-use netconv_parser_ios::IosParser;
 use netconv_core::traits::ConfigParser;
+use netconv_parser_ios::IosParser;
 
 const SWITCH_CONFIG: &str = r#"
 hostname ACCESS-SW-01
@@ -43,7 +43,9 @@ ip route 0.0.0.0 0.0.0.0 203.0.113.1
 
 #[test]
 fn switch_config_has_no_mismatches_under_l2_profile() {
-    let (ir, _) = IosParser.parse(SWITCH_CONFIG).expect("valid switch config should parse");
+    let (ir, _) = IosParser
+        .parse(SWITCH_CONFIG)
+        .expect("valid switch config should parse");
     let mismatches = detect_domain_mismatches(&ir, DeviceProfile::L2Switch);
     assert!(
         mismatches.is_empty(),
@@ -54,7 +56,9 @@ fn switch_config_has_no_mismatches_under_l2_profile() {
 
 #[test]
 fn switch_config_is_flagged_under_l3_profile() {
-    let (ir, _) = IosParser.parse(SWITCH_CONFIG).expect("valid switch config should parse");
+    let (ir, _) = IosParser
+        .parse(SWITCH_CONFIG)
+        .expect("valid switch config should parse");
     let mismatches = detect_domain_mismatches(&ir, DeviceProfile::L3Router);
     assert!(
         !mismatches.is_empty(),
@@ -66,7 +70,9 @@ fn switch_config_is_flagged_under_l3_profile() {
 
 #[test]
 fn router_config_has_no_mismatches_under_l3_profile() {
-    let (ir, _) = IosParser.parse(ROUTER_CONFIG).expect("valid router config should parse");
+    let (ir, _) = IosParser
+        .parse(ROUTER_CONFIG)
+        .expect("valid router config should parse");
     let mismatches = detect_domain_mismatches(&ir, DeviceProfile::L3Router);
     assert!(
         mismatches.is_empty(),
@@ -77,7 +83,9 @@ fn router_config_has_no_mismatches_under_l3_profile() {
 
 #[test]
 fn router_config_is_flagged_under_l2_profile() {
-    let (ir, _) = IosParser.parse(ROUTER_CONFIG).expect("valid router config should parse");
+    let (ir, _) = IosParser
+        .parse(ROUTER_CONFIG)
+        .expect("valid router config should parse");
     let mismatches = detect_domain_mismatches(&ir, DeviceProfile::L2Switch);
     assert!(
         !mismatches.is_empty(),

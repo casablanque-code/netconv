@@ -8,7 +8,11 @@ use netconv_core::report::ConversionReport;
 /// принципиально другие вещи с тем же самым `interface <name>` в IR.
 /// Смешивать их в одной функции — ровно та ошибка, от которой уходит
 /// весь этот рефакторинг.
-pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+pub fn render_interfaces(
+    cfg: &NetworkConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     for iface in &cfg.interfaces {
         render_interface(iface, out, report);
     }
@@ -23,7 +27,11 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
 
     if let Some(desc) = &iface.description {
         out.push(format!(" description {}", desc));
-        report.add_exact("interface.description", &src_block, &format!("description {}", desc));
+        report.add_exact(
+            "interface.description",
+            &src_block,
+            &format!("description {}", desc),
+        );
     }
 
     if iface.shutdown {
@@ -142,15 +150,26 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     if iface.stp.bpduguard {
         // Подтверждено дословно: MES2324(config-if)# spanning-tree bpduguard enable
         out.push(" spanning-tree bpduguard enable".to_string());
-        report.add_exact("stp.bpduguard", &src_block, "spanning-tree bpduguard enable");
+        report.add_exact(
+            "stp.bpduguard",
+            &src_block,
+            "spanning-tree bpduguard enable",
+        );
     }
 
     if iface.stp.bpdufilter {
-        let is_trunk = iface.l2.as_ref().map(|l| l.mode == L2Mode::Trunk).unwrap_or(false);
+        let is_trunk = iface
+            .l2
+            .as_ref()
+            .map(|l| l.mode == L2Mode::Trunk)
+            .unwrap_or(false);
         if is_trunk {
             out.push(" ! ⚠ RISK: bpdu filtering NOT applied — trunk port detected.".to_string());
             out.push(" !   Applying it on trunk/uplink ports can cause STP loops.".to_string());
-            out.push(" !   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
+            out.push(
+                " !   Original config had 'spanning-tree bpdufilter enable' — review manually."
+                    .to_string(),
+            );
             report.add_manual(
                 "stp.bpdufilter",
                 "spanning-tree bpdufilter enable (on trunk port)",
@@ -213,7 +232,11 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
             }
 
             if let Some(allowed) = &l2.trunk_allowed {
-                let vlan_list = allowed.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+                let vlan_list = allowed
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 out.push(format!(" switchport trunk allowed vlan add {}", vlan_list));
                 report.add_approximate(
                     "interface.l2.trunk_allowed",

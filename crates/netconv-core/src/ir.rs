@@ -100,9 +100,9 @@ pub struct LocalUser {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PasswordType {
     Plaintext,
-    Type7,   // Cisco Type 7 (reversible)
-    Md5,     // enable secret 5
-    Scrypt,  // enable secret 9
+    Type7,  // Cisco Type 7 (reversible)
+    Md5,    // enable secret 5
+    Scrypt, // enable secret 9
 }
 
 // ---------------------------------------------------------------------------
@@ -342,9 +342,9 @@ pub struct OspfAreaConfig {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OspfArea {
-    Backbone,           // area 0
+    Backbone, // area 0
     Normal(u32),
-    IpFormat(IpAddr),  // area 0.0.0.1 формат
+    IpFormat(IpAddr), // area 0.0.0.1 формат
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -530,8 +530,8 @@ pub enum AclName {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AclType {
-    Standard,   // только src IP
-    Extended,   // src+dst+proto+port
+    Standard, // только src IP
+    Extended, // src+dst+proto+port
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -597,9 +597,9 @@ pub struct NatRule {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum NatType {
-    Dynamic,   // source list ACL pool
-    Overload,  // PAT
-    Static,    // фиксированный маппинг
+    Dynamic,  // source list ACL pool
+    Overload, // PAT
+    Static,   // фиксированный маппинг
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -727,15 +727,15 @@ impl InterfaceName {
 
         let kind = match kind_str.to_lowercase().as_str() {
             "gigabitethernet" => InterfaceKind::GigabitEthernet,
-            "fastethernet"    => InterfaceKind::FastEthernet,
+            "fastethernet" => InterfaceKind::FastEthernet,
             "tengigabitethernet" | "tengige" => InterfaceKind::TenGigabitEthernet,
-            "loopback"        => InterfaceKind::Loopback,
-            "vlan"            => InterfaceKind::Vlan,
-            "tunnel"          => InterfaceKind::Tunnel,
-            "serial"          => InterfaceKind::Serial,
+            "loopback" => InterfaceKind::Loopback,
+            "vlan" => InterfaceKind::Vlan,
+            "tunnel" => InterfaceKind::Tunnel,
+            "serial" => InterfaceKind::Serial,
             "bundle-ether" | "bundleether" => InterfaceKind::BundleEther,
-            "management"      => InterfaceKind::Management,
-            other             => InterfaceKind::Unknown(other.to_string()),
+            "management" => InterfaceKind::Management,
+            other => InterfaceKind::Unknown(other.to_string()),
         };
 
         InterfaceName { kind, id, original }
@@ -768,7 +768,7 @@ fn split_interface_name(name: &str) -> (&str, String) {
     let pos = name.find(|c: char| c.is_ascii_digit());
     match pos {
         Some(i) => (&name[..i], name[i..].to_string()),
-        None    => (name, String::new()),
+        None => (name, String::new()),
     }
 }
 

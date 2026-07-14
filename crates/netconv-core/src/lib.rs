@@ -4,6 +4,8 @@ pub mod report;
 pub mod traits;
 
 pub use ir::*;
-pub use profile::{DeviceProfile, DomainMismatch, detect_domain_mismatches};
-pub use report::{ConversionReport, ReportSummary, ReportItem, Severity, RiskScore, RiskLevel, ConfidenceLevel};
+pub use profile::{detect_domain_mismatches, DeviceProfile, DomainMismatch};
+pub use report::{
+    ConfidenceLevel, ConversionReport, ReportItem, ReportSummary, RiskLevel, RiskScore, Severity,
+};
 pub use traits::*;

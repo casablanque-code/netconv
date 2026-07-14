@@ -23,25 +23,35 @@ ip access-list extended ACL-INTERNET-IN
 
 #[test]
 fn eltex_renders_acl_body_referenced_by_interface() {
-    let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_ACL).expect("conversion should succeed");
+    let output =
+        convert(&IosParser, &EltexRenderer, CONFIG_WITH_ACL).expect("conversion should succeed");
 
     // Ссылка на интерфейсе должна быть на месте (это уже работало раньше).
     assert!(
-        output.config_text.contains("ip access-group ACL-INTERNET-IN in"),
+        output
+            .config_text
+            .contains("ip access-group ACL-INTERNET-IN in"),
         "interface should still reference the ACL:\n{}",
         output.config_text
     );
 
     // Само тело ACL обязано присутствовать — раньше отсутствовало полностью.
     assert!(
-        output.config_text.contains("ip access-list") && output.config_text.contains("ACL-INTERNET-IN"),
+        output.config_text.contains("ip access-list")
+            && output.config_text.contains("ACL-INTERNET-IN"),
         "ACL body (ip access-list ACL-INTERNET-IN ...) must be rendered, config was:\n{}",
         output.config_text
     );
 
     // Конкретные правила должны попасть в вывод.
-    assert!(output.config_text.contains("443"), "rule matching port 443 should be present");
-    assert!(output.config_text.contains("80"), "rule matching port 80 should be present");
+    assert!(
+        output.config_text.contains("443"),
+        "rule matching port 443 should be present"
+    );
+    assert!(
+        output.config_text.contains("80"),
+        "rule matching port 80 should be present"
+    );
     assert!(
         output.config_text.to_lowercase().contains("deny"),
         "deny rule should be present"
@@ -50,10 +60,18 @@ fn eltex_renders_acl_body_referenced_by_interface() {
 
 #[test]
 fn eltex_acl_entries_appear_in_report() {
-    let output = convert(&IosParser, &EltexRenderer, CONFIG_WITH_ACL).expect("conversion should succeed");
-    let acl_items = output.report.items.iter()
+    let output =
+        convert(&IosParser, &EltexRenderer, CONFIG_WITH_ACL).expect("conversion should succeed");
+    let acl_items = output
+        .report
+        .items
+        .iter()
         .filter(|i| i.category == "acl.entry")
         .count();
     // 3 правила в исходном ACL → минимум 3 записи в отчёте.
-    assert!(acl_items >= 3, "expected at least 3 acl.entry report items, got {}", acl_items);
+    assert!(
+        acl_items >= 3,
+        "expected at least 3 acl.entry report items, got {}",
+        acl_items
+    );
 }

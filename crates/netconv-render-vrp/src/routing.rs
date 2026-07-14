@@ -1,6 +1,6 @@
+use crate::iface::ospf_area_to_string;
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
-use crate::iface::ospf_area_to_string;
 
 pub fn render_routing(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
     render_static_routes(&cfg.routing.static_routes, out, report);
@@ -30,8 +30,14 @@ pub fn render_routing(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut C
     }
 }
 
-fn render_static_routes(routes: &[StaticRoute], out: &mut Vec<String>, report: &mut ConversionReport) {
-    if routes.is_empty() { return; }
+fn render_static_routes(
+    routes: &[StaticRoute],
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
+    if routes.is_empty() {
+        return;
+    }
 
     out.push("#".to_string());
 
@@ -40,28 +46,44 @@ fn render_static_routes(routes: &[StaticRoute], out: &mut Vec<String>, report: &
         let mask = prefix_len_to_mask(prefix.prefix_len());
 
         let nh_str = match &route.next_hop {
-            NextHop::Ip(ip)          => ip.to_string(),
-            NextHop::Interface(i)    => i.clone(),
+            NextHop::Ip(ip) => ip.to_string(),
+            NextHop::Interface(i) => i.clone(),
             NextHop::IpAndInterface(ip, _) => ip.to_string(),
-            NextHop::Null0           => "NULL0".to_string(),
+            NextHop::Null0 => "NULL0".to_string(),
         };
 
-        let distance_str = route.distance
+        let distance_str = route
+            .distance
             .map(|d| format!(" preference {}", d))
             .unwrap_or_default();
 
-        let desc_str = route.name
+        let desc_str = route
+            .name
             .as_ref()
             .map(|n| format!(" description {}", n))
             .unwrap_or_default();
 
         // Cisco: ip route 10.0.0.0 255.255.255.0 10.0.1.1 [distance]
         // VRP:   ip route-static 10.0.0.0 255.255.255.0 10.0.1.1 [preference N] [description X]
-        let dst = format!("ip route-static {} {} {}{}{}", prefix.addr(), mask, nh_str, distance_str, desc_str);
+        let dst = format!(
+            "ip route-static {} {} {}{}{}",
+            prefix.addr(),
+            mask,
+            nh_str,
+            distance_str,
+            desc_str
+        );
 
-        let src = format!("ip route {} {} {}{}",
-            prefix.addr(), mask, nh_str,
-            route.distance.map(|d| format!(" {}", d)).unwrap_or_default());
+        let src = format!(
+            "ip route {} {} {}{}",
+            prefix.addr(),
+            mask,
+            nh_str,
+            route
+                .distance
+                .map(|d| format!(" {}", d))
+                .unwrap_or_default()
+        );
 
         out.push(dst.clone());
         report.add_approximate(
@@ -77,8 +99,13 @@ fn render_static_routes(routes: &[StaticRoute], out: &mut Vec<String>, report: &
 
 fn render_ospf(ospf: &OspfProcess, out: &mut Vec<String>, report: &mut ConversionReport) {
     out.push("#".to_string());
-    out.push(format!("ospf {} router-id {}", ospf.process_id,
-        ospf.router_id.map(|r| r.to_string()).unwrap_or_else(|| "0.0.0.0".to_string())));
+    out.push(format!(
+        "ospf {} router-id {}",
+        ospf.process_id,
+        ospf.router_id
+            .map(|r| r.to_string())
+            .unwrap_or_else(|| "0.0.0.0".to_string())
+    ));
 
     let src_block = format!("router ospf {}", ospf.process_id);
 
@@ -116,8 +143,14 @@ fn render_ospf(ospf: &OspfProcess, out: &mut Vec<String>, report: &mut Conversio
     // default-information originate
     if let Some(def) = &ospf.default_originate {
         let always_str = if def.always { " always" } else { "" };
-        let mt_str = def.metric_type.map(|t| format!(" type {}", t)).unwrap_or_default();
-        let mc_str = def.metric.map(|m| format!(" cost {}", m)).unwrap_or_default();
+        let mt_str = def
+            .metric_type
+            .map(|t| format!(" type {}", t))
+            .unwrap_or_default();
+        let mc_str = def
+            .metric
+            .map(|m| format!(" cost {}", m))
+            .unwrap_or_default();
         let cmd = format!(" default-route-advertise{}{}{}", always_str, mc_str, mt_str);
         out.push(cmd.clone());
         report.add_approximate(
@@ -154,7 +187,12 @@ fn render_ospf(ospf: &OspfProcess, out: &mut Vec<String>, report: &mut Conversio
     out.push(String::new());
 }
 
-fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut ConversionReport, _ctx: &str) {
+fn render_ospf_area(
+    area: &OspfAreaConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    _ctx: &str,
+) {
     let area_str = ospf_area_to_string(&area.area);
 
     out.push(format!(" area {}", area_str));
@@ -168,7 +206,11 @@ fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut C
         }
         OspfAreaType::StubNoSummary => {
             out.push("  stub no-summary".to_string());
-            report.add_exact("ospf.area_type", &format!("area {} stub no-summary", area_str), "stub no-summary");
+            report.add_exact(
+                "ospf.area_type",
+                &format!("area {} stub no-summary", area_str),
+                "stub no-summary",
+            );
         }
         OspfAreaType::Nssa => {
             out.push("  nssa".to_string());
@@ -176,7 +218,11 @@ fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut C
         }
         OspfAreaType::NssaNoSummary => {
             out.push("  nssa no-summary".to_string());
-            report.add_exact("ospf.area_type", &format!("area {} nssa no-summary", area_str), "nssa no-summary");
+            report.add_exact(
+                "ospf.area_type",
+                &format!("area {} nssa no-summary", area_str),
+                "nssa no-summary",
+            );
         }
     }
 
@@ -211,22 +257,32 @@ fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut C
         report.add_exact(
             "ospf.network",
             &format!("network {} {} area {}", net.prefix.addr(), wc, area_str),
-            &format!("network {} {} (inside area {})", net.prefix.addr(), wc, area_str),
+            &format!(
+                "network {} {} (inside area {})",
+                net.prefix.addr(),
+                wc,
+                area_str
+            ),
         );
     }
 
     out.push(" #".to_string());
 }
 
-fn render_ospf_redistribute(redist: &OspfRedistribute, _pid: u32, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_ospf_redistribute(
+    redist: &OspfRedistribute,
+    _pid: u32,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     // Cisco: redistribute connected subnets
     // VRP:   import-route direct  (в контексте ospf)
 
     let (vrp_src, ios_src) = match &redist.source {
         RedistributeSource::Connected => ("direct", "connected"),
-        RedistributeSource::Static    => ("static", "static"),
-        RedistributeSource::Rip       => ("rip", "rip"),
-        RedistributeSource::Bgp(asn)  => {
+        RedistributeSource::Static => ("static", "static"),
+        RedistributeSource::Rip => ("rip", "rip"),
+        RedistributeSource::Bgp(asn) => {
             out.push(format!(" import-route bgp {}", asn));
             report.add_approximate(
                 "ospf.redistribute",
@@ -247,11 +303,23 @@ fn render_ospf_redistribute(redist: &OspfRedistribute, _pid: u32, out: &mut Vec<
         }
     };
 
-    let cost_str = redist.metric.map(|m| format!(" cost {}", m)).unwrap_or_default();
-    let type_str = redist.metric_type.map(|t| format!(" type {}", t)).unwrap_or_default();
-    let tag_str  = redist.tag.map(|t| format!(" tag {}", t)).unwrap_or_default();
+    let cost_str = redist
+        .metric
+        .map(|m| format!(" cost {}", m))
+        .unwrap_or_default();
+    let type_str = redist
+        .metric_type
+        .map(|t| format!(" type {}", t))
+        .unwrap_or_default();
+    let tag_str = redist
+        .tag
+        .map(|t| format!(" tag {}", t))
+        .unwrap_or_default();
 
-    let cmd = format!(" import-route {}{}{}{}", vrp_src, cost_str, type_str, tag_str);
+    let cmd = format!(
+        " import-route {}{}{}{}",
+        vrp_src, cost_str, type_str, tag_str
+    );
     out.push(cmd.clone());
 
     report.add_approximate(
@@ -268,7 +336,11 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
 
     if let Some(rid) = bgp.router_id {
         out.push(format!(" router-id {}", rid));
-        report.add_exact("bgp.router_id", &format!("bgp router-id {}", rid), &format!("router-id {}", rid));
+        report.add_exact(
+            "bgp.router_id",
+            &format!("bgp router-id {}", rid),
+            &format!("router-id {}", rid),
+        );
     }
 
     if bgp.log_neighbor_changes {
@@ -366,7 +438,11 @@ fn render_bgp_peer_group(pg: &BgpPeerGroup, out: &mut Vec<String>, report: &mut 
     }
 }
 
-fn render_bgp_neighbor(neighbor: &BgpNeighbor, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_bgp_neighbor(
+    neighbor: &BgpNeighbor,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     let addr = &neighbor.address;
 
     if neighbor.remote_as > 0 {
@@ -509,13 +585,18 @@ fn render_bgp_address_family(
     // Cisco: address-family ipv4 unicast
     // VRP:   ipv4-family unicast  (внутри bgp блока)
     let (vrp_family, ios_family) = match (&af.afi, &af.safi) {
-        (BgpAfi::Ipv4, BgpSafi::Unicast)   => ("ipv4-family unicast",   "address-family ipv4 unicast"),
-        (BgpAfi::Ipv4, BgpSafi::Multicast)  => ("ipv4-family multicast", "address-family ipv4 multicast"),
-        (BgpAfi::Ipv4, BgpSafi::Labeled)    => ("ipv4-family labeled-unicast", "address-family ipv4 labeled-unicast"),
-        (BgpAfi::Ipv6, BgpSafi::Unicast)    => ("ipv6-family unicast",   "address-family ipv6 unicast"),
-        (BgpAfi::Vpnv4, _)                  => ("vpnv4-family",          "address-family vpnv4"),
-        (BgpAfi::L2vpn, BgpSafi::Evpn)      => ("l2vpn-family evpn",     "address-family l2vpn evpn"),
-        _                                    => ("ipv4-family unicast",   "address-family ipv4"),
+        (BgpAfi::Ipv4, BgpSafi::Unicast) => ("ipv4-family unicast", "address-family ipv4 unicast"),
+        (BgpAfi::Ipv4, BgpSafi::Multicast) => {
+            ("ipv4-family multicast", "address-family ipv4 multicast")
+        }
+        (BgpAfi::Ipv4, BgpSafi::Labeled) => (
+            "ipv4-family labeled-unicast",
+            "address-family ipv4 labeled-unicast",
+        ),
+        (BgpAfi::Ipv6, BgpSafi::Unicast) => ("ipv6-family unicast", "address-family ipv6 unicast"),
+        (BgpAfi::Vpnv4, _) => ("vpnv4-family", "address-family vpnv4"),
+        (BgpAfi::L2vpn, BgpSafi::Evpn) => ("l2vpn-family evpn", "address-family l2vpn evpn"),
+        _ => ("ipv4-family unicast", "address-family ipv4"),
     };
 
     out.push(" #".to_string());
@@ -547,7 +628,11 @@ fn render_bgp_address_family(
     // aggregate-address
     for agg in &af.aggregate_addresses {
         let mask = prefix_len_to_mask(agg.prefix.prefix_len());
-        let so = if agg.summary_only { " detail-suppressed" } else { "" };
+        let so = if agg.summary_only {
+            " detail-suppressed"
+        } else {
+            ""
+        };
         out.push(format!("  aggregate {} {}{}", agg.prefix.addr(), mask, so));
         report.add_approximate(
             "bgp.aggregate",
@@ -581,7 +666,10 @@ fn render_bgp_address_family(
             out.push(format!("  peer {} route-policy {} export", n.address, rm));
         }
         if n.soft_reconfiguration {
-            out.push(format!("  # peer {} soft-reconfiguration — не нужно на VRP", n.address));
+            out.push(format!(
+                "  # peer {} soft-reconfiguration — не нужно на VRP",
+                n.address
+            ));
         }
         if n.default_originate {
             out.push(format!("  peer {} default-route-advertise", n.address));
@@ -597,13 +685,17 @@ fn render_bgp_address_family(
     out.push(" #".to_string());
 }
 
-fn render_bgp_redistribute(redist: &OspfRedistribute, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_bgp_redistribute(
+    redist: &OspfRedistribute,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     let (vrp_src, ios_src) = match &redist.source {
-        RedistributeSource::Connected => ("direct",   "connected"),
-        RedistributeSource::Static    => ("static",   "static"),
-        RedistributeSource::Rip       => ("rip",      "rip"),
-        RedistributeSource::Bgp(_)    => return, // BGP в BGP не редистрибутят
-        RedistributeSource::Eigrp(_)  => {
+        RedistributeSource::Connected => ("direct", "connected"),
+        RedistributeSource::Static => ("static", "static"),
+        RedistributeSource::Rip => ("rip", "rip"),
+        RedistributeSource::Bgp(_) => return, // BGP в BGP не редистрибутят
+        RedistributeSource::Eigrp(_) => {
             report.add_manual(
                 "bgp.redistribute.eigrp",
                 "redistribute eigrp",
@@ -629,7 +721,11 @@ fn render_bgp_redistribute(redist: &OspfRedistribute, out: &mut Vec<String>, rep
 // ---------------------------------------------------------------------------
 
 fn prefix_len_to_mask(prefix_len: u8) -> std::net::Ipv4Addr {
-    let bits: u32 = if prefix_len == 0 { 0 } else { u32::MAX << (32 - prefix_len) };
+    let bits: u32 = if prefix_len == 0 {
+        0
+    } else {
+        u32::MAX << (32 - prefix_len)
+    };
     std::net::Ipv4Addr::from(bits)
 }
 

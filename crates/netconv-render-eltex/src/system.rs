@@ -28,12 +28,18 @@ fn render_hostname(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conv
 }
 
 fn render_ntp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.ntp.is_empty() { return; }
+    if cfg.ntp.is_empty() {
+        return;
+    }
     for ntp in &cfg.ntp {
         // Cisco: ntp server 1.2.3.4 prefer
         // ESR:   ntp server 1.2.3.4
         //        ntp prefer 1.2.3.4  (prefer — отдельная команда)
-        let src = format!("ntp server {}{}", ntp.address, if ntp.prefer { " prefer" } else { "" });
+        let src = format!(
+            "ntp server {}{}",
+            ntp.address,
+            if ntp.prefer { " prefer" } else { "" }
+        );
         out.push(format!("ntp server {}", ntp.address));
         if ntp.prefer {
             out.push(format!("ntp prefer {}", ntp.address));
@@ -45,23 +51,38 @@ fn render_ntp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
 }
 
 fn render_snmp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let snmp = match &cfg.snmp { Some(s) => s, None => return };
+    let snmp = match &cfg.snmp {
+        Some(s) => s,
+        None => return,
+    };
 
     let vrp_reserved = ["read", "write", "trap", "all"];
 
     for comm in &snmp.communities {
-        let ios_access = match comm.access { SnmpAccess::Ro => "RO", SnmpAccess::Rw => "RW" };
-        let esr_access = match comm.access { SnmpAccess::Ro => "ro", SnmpAccess::Rw => "rw" };
+        let ios_access = match comm.access {
+            SnmpAccess::Ro => "RO",
+            SnmpAccess::Rw => "RW",
+        };
+        let esr_access = match comm.access {
+            SnmpAccess::Ro => "ro",
+            SnmpAccess::Rw => "rw",
+        };
 
         let src = format!("snmp-server community {} {}", comm.name, ios_access);
 
         if vrp_reserved.contains(&comm.name.to_lowercase().as_str()) {
-            out.push(format!("! MANUAL: community name '{}' may conflict — rename:", comm.name));
+            out.push(format!(
+                "! MANUAL: community name '{}' may conflict — rename:",
+                comm.name
+            ));
             out.push(format!("! snmp-server community <new-name> {}", esr_access));
             report.add_manual(
                 "snmp.community",
                 &src,
-                &format!("community name '{}' conflicts with reserved keyword", comm.name),
+                &format!(
+                    "community name '{}' conflicts with reserved keyword",
+                    comm.name
+                ),
                 Some(&format!("snmp-server community <new-name> {}", esr_access)),
             );
         } else {
@@ -74,21 +95,29 @@ fn render_snmp(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversi
 
     if let Some(loc) = &snmp.location {
         out.push(format!("snmp-server location {}", loc));
-        report.add_exact("snmp", &format!("snmp-server location {}", loc),
-            &format!("snmp-server location {}", loc));
+        report.add_exact(
+            "snmp",
+            &format!("snmp-server location {}", loc),
+            &format!("snmp-server location {}", loc),
+        );
     }
 
     if let Some(contact) = &snmp.contact {
         out.push(format!("snmp-server contact {}", contact));
-        report.add_exact("snmp", &format!("snmp-server contact {}", contact),
-            &format!("snmp-server contact {}", contact));
+        report.add_exact(
+            "snmp",
+            &format!("snmp-server contact {}", contact),
+            &format!("snmp-server contact {}", contact),
+        );
     }
 
     out.push(String::new());
 }
 
 fn render_users(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.users.is_empty() { return; }
+    if cfg.users.is_empty() {
+        return;
+    }
 
     for user in &cfg.users {
         if user.name == "enable" {
@@ -102,9 +131,9 @@ fn render_users(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Convers
         }
 
         let pw_note = match user.password_type {
-            PasswordType::Type7     => "Cisco Type 7 (reversible) — enter plaintext password",
-            PasswordType::Md5       => "Cisco MD5 — cannot decrypt, set new password",
-            PasswordType::Scrypt    => "Cisco scrypt — cannot decrypt, set new password",
+            PasswordType::Type7 => "Cisco Type 7 (reversible) — enter plaintext password",
+            PasswordType::Md5 => "Cisco MD5 — cannot decrypt, set new password",
+            PasswordType::Scrypt => "Cisco scrypt — cannot decrypt, set new password",
             PasswordType::Plaintext => "Set password",
         };
 
@@ -118,14 +147,20 @@ fn render_users(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Convers
             "user",
             &format!("username {} privilege {}", user.name, user.privilege),
             pw_note,
-            Some(&format!("username {} / password <PASS> / privilege {}", user.name, user.privilege)),
+            Some(&format!(
+                "username {} / password <PASS> / privilege {}",
+                user.name, user.privilege
+            )),
         );
     }
     out.push(String::new());
 }
 
 fn render_ssh(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let ssh = match &cfg.ssh { Some(s) => s, None => return };
+    let ssh = match &cfg.ssh {
+        Some(s) => s,
+        None => return,
+    };
     // ESR: ssh server — включён по умолчанию если есть пользователи
     // ip ssh version 2 → на ESR SSHv2 по умолчанию
     out.push("! SSH: enabled by default on ESR when users are configured.".to_string());
@@ -142,7 +177,10 @@ fn render_ssh(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
 }
 
 fn render_logging(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let logging = match &cfg.logging { Some(l) => l, None => return };
+    let logging = match &cfg.logging {
+        Some(l) => l,
+        None => return,
+    };
     if let Some(size) = logging.buffered_size {
         // ESR: syslog file-size <KB>  (в КБ, не в байтах)
         let size_kb = std::cmp::max(1, size / 1024);
@@ -163,14 +201,21 @@ fn render_logging(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conve
             "ESR: syslog host вместо logging",
         );
     }
-    if !cfg.logging.as_ref().map(|l| l.hosts.is_empty()).unwrap_or(true)
-        || logging.buffered_size.is_some() {
+    if !cfg
+        .logging
+        .as_ref()
+        .map(|l| l.hosts.is_empty())
+        .unwrap_or(true)
+        || logging.buffered_size.is_some()
+    {
         out.push(String::new());
     }
 }
 
 fn render_dns(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.dns.is_empty() { return; }
+    if cfg.dns.is_empty() {
+        return;
+    }
 
     // ESR DNS resolver syntax не верифицирован в этом проекте (в отличие от
     // VRP, где есть подтверждённый паттерн 'dns resolve' / 'dns server <ip>').
@@ -179,19 +224,28 @@ fn render_dns(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
     // либо потерять, либо угадать синтаксис устройства.
     out.push("! MANUAL: DNS servers (verify exact ESR syntax before applying):".to_string());
     for dns in &cfg.dns {
-        out.push(format!("!   ip name-server {}  ! source: ip name-server {}", dns, dns));
+        out.push(format!(
+            "!   ip name-server {}  ! source: ip name-server {}",
+            dns, dns
+        ));
         report.add_manual(
             "dns",
             &format!("ip name-server {}", dns),
             "ESR DNS resolver syntax not verified in this tool — apply manually",
-            Some(&format!("Confirm and configure DNS server {} via ESR CLI documentation", dns)),
+            Some(&format!(
+                "Confirm and configure DNS server {} via ESR CLI documentation",
+                dns
+            )),
         );
     }
     out.push(String::new());
 }
 
 fn render_line_vty(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let vty = match &cfg.line_vty { Some(v) => v, None => return };
+    let vty = match &cfg.line_vty {
+        Some(v) => v,
+        None => return,
+    };
 
     // Как и с DNS — точный ESR-синтаксис для line vty (idle-timeout /
     // transport input аналогов) не верифицирован в этом проекте. Раньше эти
@@ -205,13 +259,19 @@ fn render_line_vty(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conv
         ));
         report.add_manual(
             "line_vty.timeout",
-            &format!("exec-timeout {} {}", vty.exec_timeout_min, vty.exec_timeout_sec),
+            &format!(
+                "exec-timeout {} {}",
+                vty.exec_timeout_min, vty.exec_timeout_sec
+            ),
             "ESR line vty syntax not verified in this tool — apply manually",
             None,
         );
     }
     for proto in &vty.transport_input {
-        out.push(format!("!   transport input {}  ! source: line vty transport input", proto));
+        out.push(format!(
+            "!   transport input {}  ! source: line vty transport input",
+            proto
+        ));
         report.add_manual(
             "line_vty.transport",
             &format!("transport input {}", proto),
@@ -223,7 +283,10 @@ fn render_line_vty(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conv
 }
 
 fn render_banner(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let banner = match &cfg.banner { Some(b) => b, None => return };
+    let banner = match &cfg.banner {
+        Some(b) => b,
+        None => return,
+    };
 
     // Banner-текст и его delimiter-ы (^C ... ^C) не парсятся структурно
     // (см. netconv-parser-ios::tree — banner сохраняется одной строкой как
@@ -242,8 +305,13 @@ fn render_banner(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conver
 }
 
 fn render_aaa_note(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    let aaa = match &cfg.aaa { Some(a) => a, None => return };
-    if !aaa.new_model { return; }
+    let aaa = match &cfg.aaa {
+        Some(a) => a,
+        None => return,
+    };
+    if !aaa.new_model {
+        return;
+    }
 
     out.push("! MANUAL: AAA configuration".to_string());
     out.push("!   Source used 'aaa new-model'. On ESR configure authentication via:".to_string());

@@ -1,14 +1,24 @@
+use crate::scope::RenderScope;
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
-use crate::scope::RenderScope;
 
-pub(crate) fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
+pub(crate) fn render_interfaces(
+    cfg: &NetworkConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    scope: RenderScope,
+) {
     for iface in &cfg.interfaces {
         render_interface(iface, out, report, scope);
     }
 }
 
-fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut ConversionReport, scope: RenderScope) {
+fn render_interface(
+    iface: &Interface,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    scope: RenderScope,
+) {
     let vrp_name = ios_to_vrp_ifname(&iface.name);
 
     out.push("#".to_string());
@@ -19,7 +29,11 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     // description — 1:1
     if let Some(desc) = &iface.description {
         out.push(format!(" description {}", desc));
-        report.add_exact("interface.description", &src_block, &format!("description {}", desc));
+        report.add_exact(
+            "interface.description",
+            &src_block,
+            &format!("description {}", desc),
+        );
     }
 
     // shutdown / undo shutdown
@@ -134,7 +148,10 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
         if let Some(nat_dir) = &iface.nat_direction {
             match nat_dir {
                 NatDirection::Inside => {
-                    out.push(" # nat: inside (настраивается через 'nat outbound' на этом интерфейсе)".to_string());
+                    out.push(
+                        " # nat: inside (настраивается через 'nat outbound' на этом интерфейсе)"
+                            .to_string(),
+                    );
                 }
                 NatDirection::Outside => {
                     out.push(" # nat: outside".to_string());
@@ -148,15 +165,24 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     // VRP:   voice-vlan 11 enable
     if scope.wants_l2() {
         if let Some(vv) = iface.voice_vlan {
-            let is_trunk = iface.l2.as_ref()
+            let is_trunk = iface
+                .l2
+                .as_ref()
                 .map(|l| l.mode == L2Mode::Trunk)
                 .unwrap_or(false);
 
             if is_trunk {
                 // Voice VLAN на trunk порту — нестандартная конфигурация
-                out.push(format!(" # ⚠ WARN: voice-vlan {} on trunk port — verify behavior on VRP.", vv));
-                out.push(format!(" #   In Cisco 'switchport voice vlan' on trunk is non-standard."));
-                out.push(format!(" #   On VRP voice-vlan on trunk may behave differently — review manually."));
+                out.push(format!(
+                    " # ⚠ WARN: voice-vlan {} on trunk port — verify behavior on VRP.",
+                    vv
+                ));
+                out.push(format!(
+                    " #   In Cisco 'switchport voice vlan' on trunk is non-standard."
+                ));
+                out.push(format!(
+                    " #   On VRP voice-vlan on trunk may behave differently — review manually."
+                ));
                 out.push(format!(" voice-vlan {} enable", vv));
                 report.add_approximate(
                     "interface.voice_vlan.trunk",
@@ -186,7 +212,10 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
                 // ASSUMPTION: Cisco "level X" интерпретируется как X% от bandwidth.
                 // На некоторых платформах Cisco level — это pps или kbps, не процент.
                 // Проверь оригинальную документацию платформы перед применением.
-                out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
+                out.push(format!(
+                    " # ASSUMPTION: storm-control level {} interpreted as {}%",
+                    level, level
+                ));
                 out.push(format!(" storm-control broadcast percent {}", level));
                 report.add_approximate(
                     "interface.storm_control",
@@ -199,7 +228,10 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
                 );
             }
             if let Some(level) = sc.multicast_level {
-                out.push(format!(" # ASSUMPTION: storm-control level {} interpreted as {}%", level, level));
+                out.push(format!(
+                    " # ASSUMPTION: storm-control level {} interpreted as {}%",
+                    level, level
+                ));
                 out.push(format!(" storm-control multicast percent {}", level));
                 report.add_approximate(
                     "interface.storm_control",
@@ -229,7 +261,9 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
         }
 
         if iface.stp.bpdufilter {
-            let is_trunk = iface.l2.as_ref()
+            let is_trunk = iface
+                .l2
+                .as_ref()
                 .map(|l| l.mode == L2Mode::Trunk)
                 .unwrap_or(false);
 
@@ -237,9 +271,18 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
                 // Context-aware: trunk порт — НЕ применяем bpdu-filter автоматически
                 // это uplink/downlink к другому свитчу, bpdu-filter здесь опасен
                 out.push(" # ⚠ RISK: bpdu-filter NOT applied — trunk port detected.".to_string());
-                out.push(" #   Applying bpdu-filter on trunk/uplink ports can cause STP loops.".to_string());
-                out.push(" #   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
-                out.push(" #   If this port connects to an end device (not a switch), uncomment:".to_string());
+                out.push(
+                    " #   Applying bpdu-filter on trunk/uplink ports can cause STP loops."
+                        .to_string(),
+                );
+                out.push(
+                    " #   Original config had 'spanning-tree bpdufilter enable' — review manually."
+                        .to_string(),
+                );
+                out.push(
+                    " #   If this port connects to an end device (not a switch), uncomment:"
+                        .to_string(),
+                );
                 out.push(" #   stp bpdu-filter enable".to_string());
                 report.add_manual(
                     "stp.bpdufilter",
@@ -250,7 +293,10 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
             } else {
                 // Access/edge порт — применяем с предупреждением
                 out.push(" # ⚠ NOTE: BPDU filter disables STP on this port.".to_string());
-                out.push(" #   Safe only if this is a trusted edge port (end device, not a switch).".to_string());
+                out.push(
+                    " #   Safe only if this is a trusted edge port (end device, not a switch)."
+                        .to_string(),
+                );
                 out.push(" stp bpdu-filter enable".to_string());
                 report.add_approximate(
                     "stp.bpdufilter",
@@ -317,7 +363,8 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
             }
 
             if let Some(allowed) = &l2.trunk_allowed {
-                let vlan_list = allowed.iter()
+                let vlan_list = allowed
+                    .iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -333,12 +380,21 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
     }
 }
 
-fn render_interface_ospf(ospf: &InterfaceOspf, out: &mut Vec<String>, report: &mut ConversionReport, ctx: &str) {
+fn render_interface_ospf(
+    ospf: &InterfaceOspf,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    ctx: &str,
+) {
     // VRP: ospf <pid> area <area> — команда на интерфейсе
     // (это альтернатива network в router ospf, VRP поддерживает оба способа)
     let area_str = ospf_area_to_string(&ospf.area);
     out.push(format!(" ospf {} area {}", ospf.process_id, area_str));
-    report.add_exact("ospf.interface", ctx, &format!("ospf {} area {}", ospf.process_id, area_str));
+    report.add_exact(
+        "ospf.interface",
+        ctx,
+        &format!("ospf {} area {}", ospf.process_id, area_str),
+    );
 
     if let Some(cost) = ospf.cost {
         out.push(format!(" ospf cost {}", cost));
@@ -376,7 +432,12 @@ fn render_interface_ospf(ospf: &InterfaceOspf, out: &mut Vec<String>, report: &m
     }
 }
 
-fn render_ospf_auth_interface(auth: &OspfAuth, out: &mut Vec<String>, report: &mut ConversionReport, _ctx: &str) {
+fn render_ospf_auth_interface(
+    auth: &OspfAuth,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    _ctx: &str,
+) {
     match auth {
         OspfAuth::Simple(key) => {
             out.push(format!(" ospf authentication-mode simple plain {}", key));
@@ -388,7 +449,10 @@ fn render_ospf_auth_interface(auth: &OspfAuth, out: &mut Vec<String>, report: &m
             );
         }
         OspfAuth::Md5 { key_id, key } => {
-            out.push(format!(" ospf authentication-mode md5 {} plain {}", key_id, key));
+            out.push(format!(
+                " ospf authentication-mode md5 {} plain {}",
+                key_id, key
+            ));
             report.add_exact(
                 "ospf.auth",
                 &format!("ip ospf authentication message-digest (key {})", key_id),
@@ -398,14 +462,22 @@ fn render_ospf_auth_interface(auth: &OspfAuth, out: &mut Vec<String>, report: &m
     }
 }
 
-fn render_hsrp_as_vrrp(hsrp: &HsrpGroup, out: &mut Vec<String>, report: &mut ConversionReport, ctx: &str) {
+fn render_hsrp_as_vrrp(
+    hsrp: &HsrpGroup,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    ctx: &str,
+) {
     // HSRP → VRRP: Approximate
     // Cisco: standby 1 ip 10.0.0.1 / standby 1 priority 110 / standby 1 preempt
     // VRP:   vrrp vrid 1 virtual-ip 10.0.0.1
     //        vrrp vrid 1 priority 110
     //        vrrp vrid 1 preempt-mode timer delay 0
 
-    out.push(format!(" vrrp vrid {} virtual-ip {}", hsrp.group_id, hsrp.virtual_ip));
+    out.push(format!(
+        " vrrp vrid {} virtual-ip {}",
+        hsrp.group_id, hsrp.virtual_ip
+    ));
 
     let note = "HSRP → VRRP: протоколы несовместимы бинарно. \
                 Preempt поведение по умолчанию отличается. \
@@ -414,13 +486,19 @@ fn render_hsrp_as_vrrp(hsrp: &HsrpGroup, out: &mut Vec<String>, report: &mut Con
 
     report.add_approximate(
         "hsrp_to_vrrp",
-        &format!("standby {} ip {} (on {})", hsrp.group_id, hsrp.virtual_ip, ctx),
+        &format!(
+            "standby {} ip {} (on {})",
+            hsrp.group_id, hsrp.virtual_ip, ctx
+        ),
         &format!("vrrp vrid {} virtual-ip {}", hsrp.group_id, hsrp.virtual_ip),
         note,
     );
 
     if let Some(priority) = hsrp.priority {
-        out.push(format!(" vrrp vrid {} priority {}", hsrp.group_id, priority));
+        out.push(format!(
+            " vrrp vrid {} priority {}",
+            hsrp.group_id, priority
+        ));
         report.add_approximate(
             "hsrp_to_vrrp.priority",
             &format!("standby {} priority {}", hsrp.group_id, priority),
@@ -431,11 +509,17 @@ fn render_hsrp_as_vrrp(hsrp: &HsrpGroup, out: &mut Vec<String>, report: &mut Con
 
     if hsrp.preempt {
         let delay = hsrp.preempt_delay.unwrap_or(0);
-        out.push(format!(" vrrp vrid {} preempt-mode timer delay {}", hsrp.group_id, delay));
+        out.push(format!(
+            " vrrp vrid {} preempt-mode timer delay {}",
+            hsrp.group_id, delay
+        ));
         report.add_approximate(
             "hsrp_to_vrrp.preempt",
             &format!("standby {} preempt", hsrp.group_id),
-            &format!("vrrp vrid {} preempt-mode timer delay {}", hsrp.group_id, delay),
+            &format!(
+                "vrrp vrid {} preempt-mode timer delay {}",
+                hsrp.group_id, delay
+            ),
             "Preempt включён по умолчанию у VRRP на VRP — явная команда избыточна но безопасна",
         );
     }
@@ -443,11 +527,20 @@ fn render_hsrp_as_vrrp(hsrp: &HsrpGroup, out: &mut Vec<String>, report: &mut Con
     if let Some(timers) = &hsrp.timers {
         // HSRP таймеры в ms → VRRP в сотых долях секунды
         let hello_cs = timers.hello_ms / 10;
-        out.push(format!(" vrrp vrid {} timer advertise centisecond {}", hsrp.group_id, hello_cs));
+        out.push(format!(
+            " vrrp vrid {} timer advertise centisecond {}",
+            hsrp.group_id, hello_cs
+        ));
         report.add_approximate(
             "hsrp_to_vrrp.timers",
-            &format!("standby {} timers {}ms {}ms", hsrp.group_id, timers.hello_ms, timers.hold_ms),
-            &format!("vrrp vrid {} timer advertise centisecond {}", hsrp.group_id, hello_cs),
+            &format!(
+                "standby {} timers {}ms {}ms",
+                hsrp.group_id, timers.hello_ms, timers.hold_ms
+            ),
+            &format!(
+                "vrrp vrid {} timer advertise centisecond {}",
+                hsrp.group_id, hello_cs
+            ),
             "VRP VRRP таймеры в сотых долях секунды; hold-time не задаётся явно (3x advertise)",
         );
     }

@@ -17,9 +17,9 @@ pub enum RiskLevel {
 impl RiskLevel {
     pub fn label(&self) -> &str {
         match self {
-            RiskLevel::Low      => "LOW",
-            RiskLevel::Medium   => "MEDIUM",
-            RiskLevel::High     => "HIGH",
+            RiskLevel::Low => "LOW",
+            RiskLevel::Medium => "MEDIUM",
+            RiskLevel::High => "HIGH",
             RiskLevel::Critical => "CRITICAL",
         }
     }
@@ -48,17 +48,17 @@ impl Default for RiskScore {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ConfidenceLevel {
-    High,    // явный признак (NAT outside, ключевое слово)
-    Medium,  // косвенный признак (default route)
-    Low,     // fallback (всё остальное)
+    High,   // явный признак (NAT outside, ключевое слово)
+    Medium, // косвенный признак (default route)
+    Low,    // fallback (всё остальное)
 }
 
 impl ConfidenceLevel {
     pub fn label(&self) -> &str {
         match self {
-            ConfidenceLevel::High   => "HIGH",
+            ConfidenceLevel::High => "HIGH",
             ConfidenceLevel::Medium => "MEDIUM",
-            ConfidenceLevel::Low    => "LOW",
+            ConfidenceLevel::Low => "LOW",
         }
     }
 }
@@ -91,12 +91,16 @@ pub struct ReportSummary {
 
 impl ReportSummary {
     pub fn exact_pct(&self) -> f32 {
-        if self.total_commands == 0 { return 0.0; }
+        if self.total_commands == 0 {
+            return 0.0;
+        }
         self.exact as f32 / self.total_commands as f32 * 100.0
     }
 
     pub fn coverage_pct(&self) -> f32 {
-        if self.total_commands == 0 { return 0.0; }
+        if self.total_commands == 0 {
+            return 0.0;
+        }
         (self.exact + self.approximate) as f32 / self.total_commands as f32 * 100.0
     }
 }
@@ -186,7 +190,8 @@ impl ConversionReport {
 
     /// Только items с severity >= Warn — для краткого вывода
     pub fn warnings_and_errors(&self) -> Vec<&ReportItem> {
-        self.items.iter()
+        self.items
+            .iter()
             .filter(|i| i.severity != Severity::Ok && i.severity != Severity::Info)
             .collect()
     }

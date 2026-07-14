@@ -1,6 +1,6 @@
+use crate::iface::ospf_area_str;
 use netconv_core::ir::*;
 use netconv_core::report::ConversionReport;
-use crate::iface::ospf_area_str;
 
 pub fn render_routing(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
     render_static_routes(&cfg.routing.static_routes, out, report);
@@ -27,16 +27,22 @@ pub fn render_routing(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut C
     render_nat(cfg, out, report);
 }
 
-fn render_static_routes(routes: &[StaticRoute], out: &mut Vec<String>, report: &mut ConversionReport) {
-    if routes.is_empty() { return; }
+fn render_static_routes(
+    routes: &[StaticRoute],
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
+    if routes.is_empty() {
+        return;
+    }
     out.push("!".to_string());
 
     for route in routes {
         let nh_str = match &route.next_hop {
-            NextHop::Ip(ip)                => ip.to_string(),
-            NextHop::Interface(i)          => i.clone(),
+            NextHop::Ip(ip) => ip.to_string(),
+            NextHop::Interface(i) => i.clone(),
             NextHop::IpAndInterface(ip, _) => ip.to_string(),
-            NextHop::Null0                 => "null0".to_string(),
+            NextHop::Null0 => "null0".to_string(),
         };
 
         // ESR: ip route <prefix/len> <next-hop>
@@ -69,8 +75,11 @@ fn render_ospf(ospf: &OspfProcess, out: &mut Vec<String>, report: &mut Conversio
     if let Some(rid) = ospf.router_id {
         // ESR: ospf router-id <id>
         out.push(format!(" ospf router-id {}", rid));
-        report.add_exact("ospf.router_id", &format!("router-id {}", rid),
-            &format!("ospf router-id {}", rid));
+        report.add_exact(
+            "ospf.router_id",
+            &format!("router-id {}", rid),
+            &format!("ospf router-id {}", rid),
+        );
     }
 
     if ospf.log_adjacency {
@@ -114,7 +123,12 @@ fn render_ospf(ospf: &OspfProcess, out: &mut Vec<String>, report: &mut Conversio
     out.push(String::new());
 }
 
-fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut ConversionReport, _ctx: &str) {
+fn render_ospf_area(
+    area: &OspfAreaConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+    _ctx: &str,
+) {
     let area_str = ospf_area_str(&area.area);
 
     // Area networks
@@ -134,13 +148,19 @@ fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut C
     match area.area_type {
         OspfAreaType::Stub => {
             out.push(format!(" area {} stub", area_str));
-            report.add_exact("ospf.area_type", &format!("area {} stub", area_str),
-                &format!("area {} stub", area_str));
+            report.add_exact(
+                "ospf.area_type",
+                &format!("area {} stub", area_str),
+                &format!("area {} stub", area_str),
+            );
         }
         OspfAreaType::Nssa => {
             out.push(format!(" area {} nssa", area_str));
-            report.add_exact("ospf.area_type", &format!("area {} nssa", area_str),
-                &format!("area {} nssa", area_str));
+            report.add_exact(
+                "ospf.area_type",
+                &format!("area {} nssa", area_str),
+                &format!("area {} nssa", area_str),
+            );
         }
         _ => {}
     }
@@ -150,32 +170,49 @@ fn render_ospf_area(area: &OspfAreaConfig, out: &mut Vec<String>, report: &mut C
         match auth {
             OspfAuth::Md5 { .. } => {
                 out.push(format!(" area {} authentication message-digest", area_str));
-                report.add_exact("ospf.auth", "area X authentication message-digest",
-                    &format!("area {} authentication message-digest", area_str));
+                report.add_exact(
+                    "ospf.auth",
+                    "area X authentication message-digest",
+                    &format!("area {} authentication message-digest", area_str),
+                );
             }
             OspfAuth::Simple(_) => {
                 out.push(format!(" area {} authentication", area_str));
-                report.add_exact("ospf.auth", "area X authentication",
-                    &format!("area {} authentication", area_str));
+                report.add_exact(
+                    "ospf.auth",
+                    "area X authentication",
+                    &format!("area {} authentication", area_str),
+                );
             }
         }
     }
 }
 
-fn render_ospf_redistribute(redist: &OspfRedistribute, out: &mut Vec<String>, report: &mut ConversionReport) {
+fn render_ospf_redistribute(
+    redist: &OspfRedistribute,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     let (esr_src, ios_src) = match &redist.source {
         RedistributeSource::Connected => ("connected", "connected"),
-        RedistributeSource::Static    => ("static",    "static"),
-        RedistributeSource::Rip       => ("rip",       "rip"),
-        RedistributeSource::Bgp(asn)  => {
+        RedistributeSource::Static => ("static", "static"),
+        RedistributeSource::Rip => ("rip", "rip"),
+        RedistributeSource::Bgp(asn) => {
             out.push(format!(" redistribute bgp {}", asn));
-            report.add_exact("ospf.redistribute", &format!("redistribute bgp {}", asn),
-                &format!("redistribute bgp {}", asn));
+            report.add_exact(
+                "ospf.redistribute",
+                &format!("redistribute bgp {}", asn),
+                &format!("redistribute bgp {}", asn),
+            );
             return;
         }
         RedistributeSource::Eigrp(_) => {
-            report.add_manual("ospf.redistribute.eigrp", "redistribute eigrp",
-                "EIGRP not supported on ESR", None);
+            report.add_manual(
+                "ospf.redistribute.eigrp",
+                "redistribute eigrp",
+                "EIGRP not supported on ESR",
+                None,
+            );
             return;
         }
     };
@@ -196,15 +233,21 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
 
     if let Some(rid) = bgp.router_id {
         out.push(format!(" bgp router-id {}", rid));
-        report.add_exact("bgp.router_id", &format!("bgp router-id {}", rid),
-            &format!("bgp router-id {}", rid));
+        report.add_exact(
+            "bgp.router_id",
+            &format!("bgp router-id {}", rid),
+            &format!("bgp router-id {}", rid),
+        );
     }
 
     for neighbor in &bgp.neighbors {
         let addr = &neighbor.address;
         if neighbor.remote_as > 0 {
             // ESR BGP синтаксис близок к Cisco
-            out.push(format!(" neighbor {} remote-as {}", addr, neighbor.remote_as));
+            out.push(format!(
+                " neighbor {} remote-as {}",
+                addr, neighbor.remote_as
+            ));
             report.add_exact(
                 "bgp.neighbor",
                 &format!("neighbor {} remote-as {}", addr, neighbor.remote_as),
@@ -216,15 +259,19 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
         }
         if let Some(src) = &neighbor.update_source {
             out.push(format!(" neighbor {} update-source {}", addr, src));
-            report.add_exact("bgp.update_source",
+            report.add_exact(
+                "bgp.update_source",
                 &format!("neighbor {} update-source {}", addr, src),
-                &format!("neighbor {} update-source {}", addr, src));
+                &format!("neighbor {} update-source {}", addr, src),
+            );
         }
         if neighbor.next_hop_self {
             out.push(format!(" neighbor {} next-hop-self", addr));
-            report.add_exact("bgp.next_hop_self",
+            report.add_exact(
+                "bgp.next_hop_self",
                 &format!("neighbor {} next-hop-self", addr),
-                &format!("neighbor {} next-hop-self", addr));
+                &format!("neighbor {} next-hop-self", addr),
+            );
         }
         if neighbor.shutdown {
             out.push(format!(" neighbor {} shutdown", addr));
@@ -232,10 +279,15 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
     }
 
     // address-family ipv4
-    let all_networks: Vec<_> = bgp.networks.iter()
-        .chain(bgp.address_families.iter()
-            .filter(|af| af.afi == BgpAfi::Ipv4)
-            .flat_map(|af| af.networks.iter()))
+    let all_networks: Vec<_> = bgp
+        .networks
+        .iter()
+        .chain(
+            bgp.address_families
+                .iter()
+                .filter(|af| af.afi == BgpAfi::Ipv4)
+                .flat_map(|af| af.networks.iter()),
+        )
         .collect();
 
     if !all_networks.is_empty() {
@@ -261,10 +313,14 @@ fn render_bgp(bgp: &BgpConfig, out: &mut Vec<String>, report: &mut ConversionRep
 }
 
 fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
-    if cfg.nat.is_empty() { return; }
+    if cfg.nat.is_empty() {
+        return;
+    }
 
     // Находим WAN интерфейс
-    let wan_iface = cfg.interfaces.iter()
+    let wan_iface = cfg
+        .interfaces
+        .iter()
         .find(|i| i.nat_direction == Some(NatDirection::Outside));
     let wan_name = wan_iface.map(|i| crate::iface::ios_to_esr_ifname(&i.name));
 
@@ -304,8 +360,11 @@ fn render_nat(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut Conversio
                         out.push(format!("   ! WAN interface: {}", wan));
                     }
                 }
-                out.push(format!("   ! Source scope was limited by ACL '{}' on Cisco — \
-ESR 'match source-address' filter not auto-generated, verify scope manually", acl));
+                out.push(format!(
+                    "   ! Source scope was limited by ACL '{}' on Cisco — \
+ESR 'match source-address' filter not auto-generated, verify scope manually",
+                    acl
+                ));
                 out.push("   enable".to_string());
                 out.push("   exit".to_string());
                 out.push("  exit".to_string());
@@ -314,7 +373,10 @@ ESR 'match source-address' filter not auto-generated, verify scope manually", ac
                 report.add_approximate(
                     "nat.overload",
                     &format!("ip nat inside source list {} interface <WAN> overload", acl),
-                    &format!("nat source / ruleset {} / action source-nat interface", ruleset_name),
+                    &format!(
+                        "nat source / ruleset {} / action source-nat interface",
+                        ruleset_name
+                    ),
                     "ESR NAT: иерархический синтаксис nat source → ruleset → rule. \
                      Scope правила (исходный ACL) не переносится автоматически — \
                      проверь привязку к интерфейсам через security zones и добавь \
@@ -352,9 +414,15 @@ ESR 'match source-address' filter not auto-generated, verify scope manually", ac
                 }
             }
             NatType::Dynamic => {
-                out.push("! MANUAL: dynamic NAT — configure nat source ruleset manually".to_string());
-                report.add_manual("nat.dynamic", "ip nat inside source list ... pool ...",
-                    "ESR dynamic NAT requires manual ruleset configuration", None);
+                out.push(
+                    "! MANUAL: dynamic NAT — configure nat source ruleset manually".to_string(),
+                );
+                report.add_manual(
+                    "nat.dynamic",
+                    "ip nat inside source list ... pool ...",
+                    "ESR dynamic NAT requires manual ruleset configuration",
+                    None,
+                );
             }
         }
     }

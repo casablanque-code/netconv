@@ -48,7 +48,10 @@ pub struct DomainMismatch {
 
 /// Сверяет NetworkConfig с выбранным профилем и возвращает список
 /// найденных сущностей чужого домена. IR не изменяется.
-pub fn detect_domain_mismatches(config: &NetworkConfig, profile: DeviceProfile) -> Vec<DomainMismatch> {
+pub fn detect_domain_mismatches(
+    config: &NetworkConfig,
+    profile: DeviceProfile,
+) -> Vec<DomainMismatch> {
     let mut out = Vec::new();
 
     match profile {
@@ -123,7 +126,11 @@ pub fn detect_domain_mismatches(config: &NetworkConfig, profile: DeviceProfile) 
                     ),
                 });
             }
-            let voice_vlan_count = config.interfaces.iter().filter(|i| i.voice_vlan.is_some()).count();
+            let voice_vlan_count = config
+                .interfaces
+                .iter()
+                .filter(|i| i.voice_vlan.is_some())
+                .count();
             if voice_vlan_count > 0 {
                 out.push(DomainMismatch {
                     domain: "L2/voice-vlan".to_string(),

@@ -34,7 +34,12 @@ fn render_acl(acl: &Acl, out: &mut Vec<String>, report: &mut ConversionReport) {
                  Extended (100-199,2000-2699) → advance (3000-3999).",
                 n, vrp_num
             );
-            report.add_approximate("acl.numbered", &src_name, &format!("acl {}", vrp_num), &note);
+            report.add_approximate(
+                "acl.numbered",
+                &src_name,
+                &format!("acl {}", vrp_num),
+                &note,
+            );
 
             (format!("acl {}", vrp_num), t)
         }
@@ -68,7 +73,7 @@ fn render_acl_entry(entry: &AclEntry, acl_type: &AclType) -> String {
     let seq = entry.sequence.unwrap_or(10);
     let action = match entry.action {
         AclAction::Permit => "permit",
-        AclAction::Deny   => "deny",
+        AclAction::Deny => "deny",
     };
 
     match acl_type {
@@ -79,24 +84,41 @@ fn render_acl_entry(entry: &AclEntry, acl_type: &AclType) -> String {
         }
         AclType::Extended => {
             // VRP advance ACL: rule <seq> permit|deny <proto> source <...> [sport] dest <...> [dport]
-            let proto = entry.protocol.as_ref().map(render_protocol_vrp).unwrap_or_else(|| "ip".to_string());
+            let proto = entry
+                .protocol
+                .as_ref()
+                .map(render_protocol_vrp)
+                .unwrap_or_else(|| "ip".to_string());
             let src = render_acl_match_vrp(&entry.src);
-            let src_port = entry.src_port.as_ref()
+            let src_port = entry
+                .src_port
+                .as_ref()
                 .map(|p| format!(" source-port {}", render_port_vrp(p)))
                 .unwrap_or_default();
 
-            let dst = entry.dst.as_ref()
+            let dst = entry
+                .dst
+                .as_ref()
                 .map(|d| format!(" destination {}", render_acl_match_vrp(d)))
                 .unwrap_or_else(|| " destination any".to_string());
 
-            let dst_port = entry.dst_port.as_ref()
+            let dst_port = entry
+                .dst_port
+                .as_ref()
                 .map(|p| format!(" destination-port {}", render_port_vrp(p)))
                 .unwrap_or_default();
 
-            let tcp_flag = if entry.established { " tcp-flag ack" } else { "" };
-            let log_str  = if entry.log { " logging" } else { "" };
+            let tcp_flag = if entry.established {
+                " tcp-flag ack"
+            } else {
+                ""
+            };
+            let log_str = if entry.log { " logging" } else { "" };
 
-            format!("rule {} {} {} source {}{}{}{}{}{}", seq, action, proto, src, src_port, dst, dst_port, tcp_flag, log_str)
+            format!(
+                "rule {} {} {} source {}{}{}{}{}{}",
+                seq, action, proto, src, src_port, dst, dst_port, tcp_flag, log_str
+            )
         }
     }
 }
@@ -115,33 +137,38 @@ fn render_acl_match_vrp(m: &AclMatch) -> String {
 
 fn render_protocol_vrp(proto: &AclProtocol) -> String {
     match proto {
-        AclProtocol::Ip     => "ip".to_string(),
-        AclProtocol::Tcp    => "tcp".to_string(),
-        AclProtocol::Udp    => "udp".to_string(),
-        AclProtocol::Icmp   => "icmp".to_string(),
-        AclProtocol::Esp    => "esp".to_string(),
-        AclProtocol::Ahp    => "ah".to_string(),  // VRP использует 'ah' вместо 'ahp'
+        AclProtocol::Ip => "ip".to_string(),
+        AclProtocol::Tcp => "tcp".to_string(),
+        AclProtocol::Udp => "udp".to_string(),
+        AclProtocol::Icmp => "icmp".to_string(),
+        AclProtocol::Esp => "esp".to_string(),
+        AclProtocol::Ahp => "ah".to_string(), // VRP использует 'ah' вместо 'ahp'
         AclProtocol::Number(n) => n.to_string(),
     }
 }
 
 fn render_port_vrp(port: &AclPort) -> String {
     match port {
-        AclPort::Eq(p)      => format!("eq {}", p),
-        AclPort::Ne(p)      => format!("neq {}", p),  // VRP: neq вместо ne
-        AclPort::Lt(p)      => format!("lt {}", p),
-        AclPort::Gt(p)      => format!("gt {}", p),
-        AclPort::Range(a,b) => format!("range {} {}", a, b),
+        AclPort::Eq(p) => format!("eq {}", p),
+        AclPort::Ne(p) => format!("neq {}", p), // VRP: neq вместо ne
+        AclPort::Lt(p) => format!("lt {}", p),
+        AclPort::Gt(p) => format!("gt {}", p),
+        AclPort::Range(a, b) => format!("range {} {}", a, b),
     }
 }
 
 fn format_ios_acl_entry(entry: &AclEntry) -> String {
-    let action = match entry.action { AclAction::Permit => "permit", AclAction::Deny => "deny" };
+    let action = match entry.action {
+        AclAction::Permit => "permit",
+        AclAction::Deny => "deny",
+    };
     format!("{} {:?} → {:?}", action, entry.src, entry.dst)
 }
 
 fn invert_prefix(net: &ipnet::IpNet) -> std::net::Ipv4Addr {
-    let bits: u32 = if net.prefix_len() == 0 { u32::MAX } else {
+    let bits: u32 = if net.prefix_len() == 0 {
+        u32::MAX
+    } else {
         u32::MAX >> net.prefix_len()
     };
     std::net::Ipv4Addr::from(bits)

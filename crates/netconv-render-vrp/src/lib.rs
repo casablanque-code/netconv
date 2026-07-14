@@ -1,10 +1,10 @@
-pub mod renderer;
-pub mod iface;
-pub mod routing;
 pub mod acl;
+pub mod iface;
 pub mod nat;
+pub mod renderer;
+pub mod routing;
+mod scope;
 pub mod system;
 pub mod vlan;
-mod scope;
 
-pub use renderer::{VrpRenderer, VrpL2Renderer, VrpL3Renderer};
+pub use renderer::{VrpL2Renderer, VrpL3Renderer, VrpRenderer};

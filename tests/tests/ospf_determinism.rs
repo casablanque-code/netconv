@@ -30,9 +30,7 @@ fn ospf_areas_preserve_first_mention_order() {
     let ospf = &cfg.routing.ospf[0];
 
     // Порядок первого упоминания в конфиге: area 3, area 1, area 0, area 2.
-    let area_order: Vec<String> = ospf.areas.iter()
-        .map(|a| format!("{:?}", a.area))
-        .collect();
+    let area_order: Vec<String> = ospf.areas.iter().map(|a| format!("{:?}", a.area)).collect();
 
     assert_eq!(
         area_order,
@@ -58,7 +56,9 @@ fn ospf_areas_order_is_stable_across_repeated_parses() {
 
     for _ in 0..20 {
         let (cfg, _) = parser.parse(MULTI_AREA_OSPF_CONFIG).unwrap();
-        let order: Vec<String> = cfg.routing.ospf[0].areas.iter()
+        let order: Vec<String> = cfg.routing.ospf[0]
+            .areas
+            .iter()
             .map(|a| format!("{:?}", a.area))
             .collect();
         orders.push(order);
@@ -66,6 +66,10 @@ fn ospf_areas_order_is_stable_across_repeated_parses() {
 
     let first = &orders[0];
     for (i, order) in orders.iter().enumerate() {
-        assert_eq!(order, first, "parse #{} produced a different area order than parse #0", i);
+        assert_eq!(
+            order, first,
+            "parse #{} produced a different area order than parse #0",
+            i
+        );
     }
 }
