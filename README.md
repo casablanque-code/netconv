@@ -1,5 +1,6 @@
 # netconv
 
+[![CI](https://github.com/casablanque-code/netconv/actions/workflows/ci.yml/badge.svg)](https://github.com/casablanque-code/netconv/actions/workflows/ci.yml)
 [![Rust](https://img.shields.io/badge/rust-1.75+-orange.svg)](https://www.rust-lang.org)
 [![WASM](https://img.shields.io/badge/wasm-wasm--bindgen-blue.svg)](https://rustwasm.github.io)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
