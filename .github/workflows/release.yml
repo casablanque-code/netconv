@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: netconv-linux-x86_64
+            bin: netconv
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: netconv-macos-x86_64
+            bin: netconv
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: netconv-macos-aarch64
+            bin: netconv
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: netconv-windows-x86_64.exe
+            bin: netconv.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - run: cargo build --release -p netconv --target ${{ matrix.target }}
+
+      - name: Package binary
+        shell: bash
+        run: cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "${{ matrix.artifact }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: create GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release-assets
+          find dist -type f -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      # Заметки к релизу — автогенерация GitHub из коммитов/PR с прошлого
+      # тега, а не CHANGELOG.md целиком: файл со временем накопит все
+      # версии подряд, и вставлять его весь в тело каждого нового релиза
+      # было бы неверно уже со второго тега. Сам CHANGELOG.md остаётся
+      # источником истины в репозитории, просто не дублируется в Release body.
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
