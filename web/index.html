@@ -60,6 +60,18 @@ header {
   flex-shrink: 0;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
 .logo {
   font-family: var(--mono);
   font-size: 15px;
@@ -180,17 +192,27 @@ header {
 }
 
 .pane-action {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text3);
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  color: var(--text2);
   font-family: var(--mono);
   font-size: 11px;
   padding: 3px 8px;
   border-radius: 4px;
   cursor: pointer;
-  transition: color 0.1s, border-color 0.1s;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
 }
-.pane-action:hover { color: var(--text2); border-color: var(--border2); }
+.pane-action:hover { color: var(--text); border-color: var(--accent); background: var(--bg4); }
+
+#download-config-btn, #download-report-btn, #copy-btn {
+  border-color: var(--accent2);
+  color: var(--accent);
+}
+#download-config-btn:hover, #download-report-btn:hover, #copy-btn:hover {
+  border-color: var(--accent);
+  background: var(--bg4);
+  color: var(--accent);
+}
 
 textarea {
   flex: 1;
@@ -214,14 +236,129 @@ textarea:focus { background: var(--bg); }
   background: var(--bg);
 }
 
+/* ── diff view (split-screen с кликабельными предупреждениями) ── */
+.diff-pane {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.diff-line {
+  display: flex;
+  padding: 0 12px;
+  white-space: pre;
+  border-left: 3px solid transparent;
+}
+
+.diff-line-no {
+  flex-shrink: 0;
+  width: 34px;
+  text-align: right;
+  margin-right: 12px;
+  color: var(--text3);
+  user-select: none;
+}
+
+.diff-line-text { color: var(--text); }
+
+.diff-clickable { cursor: pointer; }
+.diff-clickable:hover { background: var(--bg3); }
+
+.diff-line.dl-ok   { border-left-color: var(--ok);   background: var(--ok-bg); }
+.diff-line.dl-warn { border-left-color: var(--warn); background: var(--warn-bg); }
+.diff-line.dl-err  { border-left-color: var(--err);  background: var(--err-bg); }
+.diff-line.dl-info { border-left-color: var(--info); background: var(--info-bg); }
+
+.diff-line.diff-line-active { background: var(--bg4) !important; }
+
+.diff-line.diff-line-linked {
+  animation: diffPulse 1.1s ease-in-out 2;
+}
+@keyframes diffPulse {
+  0%, 100% { background: var(--bg4); }
+  50% { background: var(--accent2); }
+}
+
+.diff-popover {
+  position: fixed;
+  z-index: 50;
+  max-width: 340px;
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  padding: 10px 12px;
+  font-family: var(--mono);
+}
+
+.diff-popover-item + .diff-popover-item {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.diff-popover-msg {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.diff-popover-rec {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.diff-popover-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px;
+}
+.diff-popover-close:hover { color: var(--text); }
+
 /* ── report panel ── */
 .report-panel {
   grid-column: 1 / -1;
   border-top: 1px solid var(--border);
-  max-height: 280px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 80px;
+}
+
+.report-resize-handle {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+}
+.report-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border2);
+}
+.report-resize-handle:hover::after,
+.report-resize-handle.dragging::after {
+  background: var(--accent);
 }
 
 .report-header {
@@ -479,6 +616,17 @@ textarea:focus { background: var(--bg); }
 }
 
 /* ── resize handle ── */
+@media (max-width: 1100px) {
+  header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    row-gap: 8px;
+  }
+  .header-actions { flex-wrap: wrap; gap: 8px 12px; }
+  .wasm-notice { display: none; } /* уходит первым — статус, не критично на узком экране */
+}
+
 @media (max-width: 900px) {
   .workspace { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr auto; }
   .pane { border-right: none; border-bottom: 1px solid var(--border); }
@@ -550,9 +698,9 @@ hljs.registerLanguage('netconfig', function(hljs) {
     <span class="logo-bracket">[</span>netconv<span class="logo-bracket">]</span>
     <span class="logo-sub">network config converter</span>
   </div>
-  <div style="display:flex;align-items:center;gap:12px;">
+  <div class="header-actions">
     <span id="wasm-notice" class="wasm-notice">WASM не загружен — demo mode</span>
-    <div class="profile-tabs" style="display:flex;gap:2px;align-items:center;">
+    <div class="profile-tabs">
       <button class="filter-btn" id="tab-l2" onclick="setProfile('l2', this)">L2 (switching)</button>
       <button class="filter-btn active" id="tab-l3" onclick="setProfile('l3', this)">L3 (routing)</button>
     </div>
@@ -579,6 +727,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
     <div class="pane-header">
       <span class="pane-title">source config</span>
       <div style="display:flex;gap:6px;">
+        <button class="pane-action" id="edit-source-btn" onclick="setDiffView(false)" style="display:none;">edit source</button>
         <button class="pane-action" onclick="document.getElementById('file-input').click()">upload</button>
         <button class="pane-action" onclick="loadExample()">load example</button>
         <button class="pane-action" onclick="clearInput()">clear</button>
@@ -592,6 +741,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
       autocomplete="off"
       placeholder="! Paste your Cisco IOS config here&#10;! or click 'load example'&#10;&#10;hostname ROUTER-01&#10;!&#10;interface GigabitEthernet0/0&#10; ip address 10.0.0.1 255.255.255.0&#10; no shutdown"
     ></textarea>
+    <div id="input-diff" class="diff-pane" style="display:none;"></div>
   </div>
 
   <!-- output pane -->
@@ -599,6 +749,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
     <div class="pane-header">
       <span class="pane-title">converted config</span>
       <div style="display:flex;gap:6px;">
+        <button class="pane-action" id="diff-toggle-btn" onclick="setDiffView(!diffViewActive)" style="display:none;">diff view</button>
         <button class="pane-action" id="download-config-btn" onclick="downloadConfig()" style="display:none;">download .cfg</button>
         <button class="pane-action" id="download-report-btn" onclick="downloadReport()" style="display:none;">download report</button>
         <button class="pane-action" id="copy-btn" onclick="copyOutput()" style="display:none;">copy</button>
@@ -615,6 +766,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
     <div id="output-highlighted" style="display:none;flex:1;overflow:auto;min-height:0;">
       <pre id="output-pre" style="margin:0;background:var(--bg);height:100%;"><code id="output-code" class="language-netconfig"></code></pre>
     </div>
+    <div id="output-diff" class="diff-pane" style="display:none;"></div>
     <textarea
       id="output-area"
       spellcheck="false"
@@ -624,7 +776,8 @@ hljs.registerLanguage('netconfig', function(hljs) {
   </div>
 
   <!-- report panel -->
-  <div class="report-panel">
+  <div class="report-panel" id="report-panel" style="height:280px;">
+    <div class="report-resize-handle" id="report-resize-handle"></div>
     <div class="report-header">
       <span class="report-title">conversion report</span>
       <div class="report-filters">
@@ -1089,6 +1242,11 @@ function clearInput() {
 
 let _outputRawText = '';
 let _lastResult = null;
+let _lastSourceText = '';
+let diffViewActive = false;
+
+const SEV_CLASS = { Ok: 'sev-ok', Warn: 'sev-warn', Error: 'sev-err', Info: 'sev-info' };
+const SEV_LABEL = { Ok: 'ok', Warn: 'warn', Error: 'manual', Info: 'unknown' };
 
 function showHighlightedOutput(text) {
   const code = document.getElementById('output-code');
@@ -1106,6 +1264,164 @@ function copyOutput() {
   if (!_outputRawText) return;
   navigator.clipboard.writeText(_outputRawText).then(() => showToast());
 }
+
+// ── split-diff view: клик по строке с предупреждением подсвечивает
+// соответствующую строку на другой стороне и показывает плашку с
+// пояснением. Связь строк — НЕ по номеру строки (репорт их не хранит),
+// а по индексу в allItems: buildAnnotatedLines гоняется по одному и
+// тому же массиву items для source и target, так что общий item index
+// у строки слева и строки справа и есть связь "было -> стало".
+function snippetParts(snippet) {
+  // Некоторые item'ы комбинируют несколько исходных команд через ' / '
+  // (например VLAN: "vlan 10 / name USERS") — разбиваем для построчного
+  // сопоставления с реальными строками конфига.
+  return String(snippet || '').split(' / ').map(s => s.trim()).filter(Boolean);
+}
+
+function severityRank(sev) {
+  return { Error: 3, Warn: 2, Info: 1, Ok: 0 }[sev] ?? -1;
+}
+
+function buildAnnotatedLines(text, items, field) {
+  const rawLines = (text || '').split('\n');
+  return rawLines.map(lineText => {
+    const trimmed = lineText.trim();
+    let bestSev = null;
+    let bestRank = -1;
+    const matchedIdx = [];
+
+    if (trimmed) {
+      items.forEach((item, idx) => {
+        const snippet = item[field];
+        if (!snippet) return;
+        const parts = snippetParts(snippet);
+        const hit = parts.some(p => p.length >= 4 && (trimmed === p || trimmed.includes(p) || p.includes(trimmed)));
+        if (hit) {
+          matchedIdx.push(idx);
+          const r = severityRank(item.severity);
+          if (r > bestRank) { bestRank = r; bestSev = item.severity; }
+        }
+      });
+    }
+
+    const sevClass = bestSev ? { Ok: 'dl-ok', Warn: 'dl-warn', Error: 'dl-err', Info: 'dl-info' }[bestSev] : '';
+    return { text: lineText, sevClass: sevClass || '', itemIndices: matchedIdx };
+  });
+}
+
+function renderAnnotated(containerEl, lines, side) {
+  containerEl.innerHTML = lines.map((line, i) => {
+    const cls = 'diff-line'
+      + (line.sevClass ? ' ' + line.sevClass : '')
+      + (line.itemIndices.length ? ' diff-clickable' : '');
+    const idxAttr = line.itemIndices.join(',');
+    return `<div class="${cls}" data-idx="${idxAttr}" data-side="${side}">`
+      + `<span class="diff-line-no">${i + 1}</span>`
+      + `<span class="diff-line-text">${escHtml(line.text)}</span></div>`;
+  }).join('');
+}
+
+function renderDiffPanes() {
+  const items = (_lastResult && _lastResult.report && _lastResult.report.items) || [];
+  const sourceLines = buildAnnotatedLines(_lastSourceText, items, 'source_snippet');
+  const targetLines = buildAnnotatedLines(_outputRawText, items, 'target_snippet');
+  renderAnnotated(document.getElementById('input-diff'), sourceLines, 'source');
+  renderAnnotated(document.getElementById('output-diff'), targetLines, 'target');
+}
+
+function setDiffView(active) {
+  diffViewActive = !!active && !!_lastResult;
+
+  document.getElementById('input-area').style.display = diffViewActive ? 'none' : '';
+  document.getElementById('input-diff').style.display = diffViewActive ? 'block' : 'none';
+  document.getElementById('edit-source-btn').style.display = diffViewActive ? 'block' : 'none';
+
+  const hasOutput = !!_outputRawText;
+  document.getElementById('output-highlighted').style.display = (diffViewActive || !hasOutput) ? 'none' : 'flex';
+  document.getElementById('output-diff').style.display = diffViewActive ? 'block' : 'none';
+
+  const toggleBtn = document.getElementById('diff-toggle-btn');
+  toggleBtn.textContent = diffViewActive ? 'highlighted view' : 'diff view';
+  toggleBtn.onclick = () => setDiffView(!diffViewActive);
+
+  if (diffViewActive) {
+    renderDiffPanes();
+  }
+  hideDiffPopover();
+}
+
+let _diffPopoverEl = null;
+
+function onDiffLineClick(e) {
+  const lineEl = e.target.closest('.diff-line');
+  if (!lineEl || !lineEl.dataset.idx) { hideDiffPopover(); return; }
+  const indices = lineEl.dataset.idx.split(',').filter(Boolean).map(Number);
+  if (!indices.length) { hideDiffPopover(); return; }
+
+  document.querySelectorAll('.diff-line-active').forEach(el => el.classList.remove('diff-line-active'));
+  lineEl.classList.add('diff-line-active');
+
+  const otherId = lineEl.dataset.side === 'source' ? 'output-diff' : 'input-diff';
+  const otherContainer = document.getElementById(otherId);
+  document.querySelectorAll('.diff-line-linked').forEach(el => el.classList.remove('diff-line-linked'));
+
+  let firstLinked = null;
+  otherContainer.querySelectorAll('.diff-line').forEach(el => {
+    const elIdx = (el.dataset.idx || '').split(',').filter(Boolean).map(Number);
+    if (elIdx.some(i => indices.includes(i))) {
+      el.classList.add('diff-line-linked');
+      if (!firstLinked) firstLinked = el;
+    }
+  });
+  if (firstLinked) firstLinked.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+  showDiffPopover(lineEl, indices);
+}
+
+function showDiffPopover(anchorEl, indices) {
+  hideDiffPopover();
+  const items = (_lastResult && _lastResult.report && _lastResult.report.items) || [];
+  const picked = indices.map(i => items[i]).filter(Boolean);
+  if (!picked.length) return;
+
+  const html = picked.map(item => `
+    <div class="diff-popover-item">
+      <span class="ri-sev ${SEV_CLASS[item.severity] || 'sev-info'}">${SEV_LABEL[item.severity] || item.severity}</span>
+      <div class="diff-popover-msg">${escHtml(item.message || '')}</div>
+      ${item.recommendation ? `<div class="diff-popover-rec">→ ${escHtml(item.recommendation)}</div>` : ''}
+    </div>
+  `).join('');
+
+  const pop = document.createElement('div');
+  pop.className = 'diff-popover';
+  pop.innerHTML = html + '<button class="diff-popover-close" onclick="hideDiffPopover()">×</button>';
+  document.body.appendChild(pop);
+
+  const rect = anchorEl.getBoundingClientRect();
+  const popWidth = 340;
+  pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - popWidth - 8)) + 'px';
+  pop.style.top = Math.min(rect.bottom + 6, window.innerHeight - 60) + 'px';
+
+  _diffPopoverEl = pop;
+  setTimeout(() => document.addEventListener('click', onDocClickForPopover), 0);
+}
+
+function onDocClickForPopover(e) {
+  if (_diffPopoverEl && !_diffPopoverEl.contains(e.target) && !e.target.closest('.diff-line')) {
+    hideDiffPopover();
+  }
+}
+
+function hideDiffPopover() {
+  if (_diffPopoverEl) {
+    _diffPopoverEl.remove();
+    _diffPopoverEl = null;
+    document.removeEventListener('click', onDocClickForPopover);
+  }
+}
+
+document.getElementById('input-diff').addEventListener('click', onDiffLineClick);
+document.getElementById('output-diff').addEventListener('click', onDiffLineClick);
 
 function showToast() {
   const t = document.getElementById('toast');
@@ -1130,6 +1446,36 @@ function readSourceFile(file) {
   };
   reader.readAsText(file);
 }
+
+(function setupReportResize() {
+  const handle = document.getElementById('report-resize-handle');
+  const panel = document.getElementById('report-panel');
+  const workspace = document.querySelector('.workspace');
+  let startY = 0;
+  let startHeight = 0;
+
+  function onMouseMove(e) {
+    const delta = startY - e.clientY; // тянем вверх → panel выше
+    const maxHeight = Math.round(workspace.clientHeight * 0.75);
+    const newHeight = Math.min(maxHeight, Math.max(80, startHeight + delta));
+    panel.style.height = newHeight + 'px';
+  }
+
+  function onMouseUp() {
+    handle.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    startY = e.clientY;
+    startHeight = panel.getBoundingClientRect().height;
+    handle.classList.add('dragging');
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+})();
 
 (function setupDragAndDrop() {
   const pane = document.getElementById('input-pane');
@@ -1269,6 +1615,8 @@ function runConvert() {
   document.getElementById('copy-btn').style.display = 'none';
   document.getElementById('download-config-btn').style.display = 'none';
   document.getElementById('download-report-btn').style.display = 'none';
+  document.getElementById('diff-toggle-btn').style.display = 'none';
+  setDiffView(false);
   document.getElementById('loading').classList.add('active');
   document.getElementById('report-empty').style.display = 'none';
   document.getElementById('report-body').style.display = 'none';
@@ -1297,10 +1645,12 @@ function runConvert() {
       } else {
         _outputRawText = result.config_text;
         _lastResult = result;
+        _lastSourceText = input;
         showHighlightedOutput(result.config_text);
         document.getElementById('copy-btn').style.display = 'block';
         document.getElementById('download-config-btn').style.display = 'block';
         document.getElementById('download-report-btn').style.display = 'block';
+        document.getElementById('diff-toggle-btn').style.display = 'block';
         allItems = result.report.items || [];
         renderStats(result.report);
         renderReportItems();
@@ -1361,8 +1711,8 @@ function renderReportItems() {
   }
 
   body.innerHTML = filtered.map(item => {
-    const sevClass = { Ok:'sev-ok', Warn:'sev-warn', Error:'sev-err', Info:'sev-info' }[item.severity] || 'sev-info';
-    const sevLabel = { Ok:'ok', Warn:'warn', Error:'manual', Info:'unknown' }[item.severity] || item.severity.toLowerCase();
+    const sevClass = SEV_CLASS[item.severity] || 'sev-info';
+    const sevLabel = SEV_LABEL[item.severity] || item.severity.toLowerCase();
     const rec = item.recommendation ? `<div style="margin-top:3px;color:var(--accent);font-size:11px;font-family:var(--mono);">→ ${escHtml(item.recommendation)}</div>` : '';
 
     return `<div class="report-item">
