@@ -7,6 +7,40 @@ versioning follows [SemVer](https://semver.org/) once the public API
 (CLI flags, `--profile` values, WASM exports) is considered stable —
 before 1.0.0, minor version bumps may still contain breaking changes.
 
+## [Unreleased]
+
+### Added
+
+- Web UI: file upload (drag-and-drop + file picker) for the source
+  config, and downloading the result as `<hostname>-<vendor>.cfg` plus
+  a readable Markdown conversion report alongside it.
+- Web UI: split-diff view. Toggles both panes into a read-only,
+  line-annotated mode; clicking a flagged line highlights the
+  corresponding line(s) on the other side and shows a popover with the
+  report message — linked by shared `ReportItem` index (not line
+  numbers, which the report doesn't track), matched against
+  `source_snippet`/`target_snippet` text.
+- CI: `release.yml` — pushing a `v*` tag builds the CLI for
+  linux/macos(x86_64+aarch64)/windows and publishes a GitHub Release
+  with the binaries attached.
+- CI: `prepare-release.yml` — the only manual step left in cutting a
+  release. `Actions → Prepare Release → Run workflow`, type a version;
+  it bumps the version, commits, tags, and pushes, which triggers
+  `release.yml` automatically.
+
+### Changed
+
+- All crate versions now come from a single `[workspace.package]
+  version` in the root `Cargo.toml` via `version.workspace = true`,
+  instead of being duplicated (and drifting) across seven files.
+- `netconv-wasm`'s `[profile.release]` moved to the workspace root —
+  this also silences the `cargo check` warning about per-package
+  profiles being ignored outside the workspace root.
+- Web UI: brighter `.pane-action` buttons (were nearly invisible —
+  `var(--text3)` on `var(--border)`), header no longer overflows
+  un-wrapped below ~1100px width, report panel is resizable by
+  dragging its top edge instead of a fixed 280px cap.
+
 ## [0.1.0] — 2026-07-14
 
 First tagged release. Core theme of this release: **L2 and L3 are never

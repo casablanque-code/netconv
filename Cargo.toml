@@ -9,3 +9,18 @@ members = [
     "tests",
 ]
 resolver = "2"
+
+# Единственное место с версией во всём workspace. Каждый крейт ссылается
+# на неё через version.workspace = true — больше никогда не редактируется
+# вручную по отдельности в семи Cargo.toml. Бампается автоматически
+# workflow'ом .github/workflows/prepare-release.yml (Actions → Run
+# workflow → ввести версию), который сам коммитит и тегирует.
+[workspace.package]
+version = "0.2.0"
+
+# profile.release для netconv-wasm (opt-level/lto) переехал сюда с
+# уровня пакета — cargo уже предупреждал: "profiles for the non root
+# package will be ignored, specify profiles at the workspace root".
+[profile.release]
+opt-level = "z"
+lto = true
