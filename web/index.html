@@ -141,8 +141,26 @@ header {
   flex-direction: column;
   border-right: 1px solid var(--border);
   min-height: 0;
+  position: relative;
 }
 .pane:last-child { border-right: none; }
+
+.drop-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  top: 37px; /* под pane-header, не перекрываем кнопки */
+  background: var(--bg2, rgba(0,0,0,0.75));
+  border: 2px dashed var(--border2);
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text2);
+  z-index: 10;
+  pointer-events: none;
+}
+.pane.drag-over .drop-overlay { display: flex; }
 
 .pane-header {
   padding: 8px 16px;
@@ -557,14 +575,17 @@ hljs.registerLanguage('netconfig', function(hljs) {
 
 <div class="workspace">
   <!-- input pane -->
-  <div class="pane">
+  <div class="pane" id="input-pane">
     <div class="pane-header">
       <span class="pane-title">source config</span>
       <div style="display:flex;gap:6px;">
+        <button class="pane-action" onclick="document.getElementById('file-input').click()">upload</button>
         <button class="pane-action" onclick="loadExample()">load example</button>
         <button class="pane-action" onclick="clearInput()">clear</button>
       </div>
     </div>
+    <input type="file" id="file-input" accept=".cfg,.conf,.txt,text/plain" style="display:none;" onchange="handleFileSelect(event)">
+    <div id="drop-overlay" class="drop-overlay"><span>Отпусти файл, чтобы загрузить</span></div>
     <textarea
       id="input-area"
       spellcheck="false"
@@ -577,7 +598,11 @@ hljs.registerLanguage('netconfig', function(hljs) {
   <div class="pane">
     <div class="pane-header">
       <span class="pane-title">converted config</span>
-      <button class="pane-action" id="copy-btn" onclick="copyOutput()" style="display:none;">copy</button>
+      <div style="display:flex;gap:6px;">
+        <button class="pane-action" id="download-config-btn" onclick="downloadConfig()" style="display:none;">download .cfg</button>
+        <button class="pane-action" id="download-report-btn" onclick="downloadReport()" style="display:none;">download report</button>
+        <button class="pane-action" id="copy-btn" onclick="copyOutput()" style="display:none;">copy</button>
+      </div>
     </div>
     <div id="output-empty" class="empty-state">
       <span class="big">⌁</span>
@@ -1063,6 +1088,7 @@ function clearInput() {
 }
 
 let _outputRawText = '';
+let _lastResult = null;
 
 function showHighlightedOutput(text) {
   const code = document.getElementById('output-code');
@@ -1087,6 +1113,140 @@ function showToast() {
   setTimeout(() => t.classList.remove('show'), 1800);
 }
 
+// ── загрузка исходника: кнопка + drag-and-drop ──
+function handleFileSelect(event) {
+  const file = event.target.files && event.target.files[0];
+  if (file) readSourceFile(file);
+  event.target.value = ''; // разрешить повторный выбор того же файла
+}
+
+function readSourceFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('input-area').value = e.target.result;
+  };
+  reader.onerror = () => {
+    console.error('[netconv] file read error:', reader.error);
+  };
+  reader.readAsText(file);
+}
+
+(function setupDragAndDrop() {
+  const pane = document.getElementById('input-pane');
+  ['dragenter', 'dragover'].forEach(evt => {
+    pane.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pane.classList.add('drag-over');
+    });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    pane.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      pane.classList.remove('drag-over');
+    });
+  });
+  pane.addEventListener('drop', (e) => {
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) readSourceFile(file);
+  });
+})();
+
+// ── скачивание результата: конфиг (.cfg) и читаемый репорт (.md) ──
+function extractHostname(text) {
+  const m = /^\s*hostname\s+(\S+)/im.exec(text || '');
+  return m ? m[1] : null;
+}
+
+function triggerDownload(filename, content, mime) {
+  const blob = new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function downloadConfig() {
+  if (!_outputRawText) return;
+  const hostname = extractHostname(document.getElementById('input-area').value) || 'config';
+  const dst = document.getElementById('dst-vendor').value;
+  triggerDownload(`${hostname}-${dst}.cfg`, _outputRawText, 'text/plain');
+}
+
+function downloadReport() {
+  if (!_lastResult || !_lastResult.report) return;
+  const hostname = extractHostname(document.getElementById('input-area').value) || 'config';
+  const dst = document.getElementById('dst-vendor').value;
+  const md = buildReportMarkdown(_lastResult.report);
+  triggerDownload(`${hostname}-${dst}-report.md`, md, 'text/markdown');
+}
+
+function buildReportMarkdown(report) {
+  const cov = Math.round(report.coverage_pct || 0);
+  const profileLabel = currentProfile === 'l2' ? 'L2 (switching)' : 'L3 (routing)';
+  const lines = [];
+
+  lines.push('# netconv conversion report');
+  lines.push('');
+  lines.push(`- Source: ${report.source_vendor}`);
+  lines.push(`- Target: ${report.target_vendor}`);
+  lines.push(`- Profile: ${profileLabel}`);
+  lines.push(`- Coverage: ${cov}%`);
+  if (report.risk_level && report.risk_level !== 'LOW') {
+    lines.push(`- Risk: ${report.risk_level}`);
+  }
+  lines.push(`- Exact: ${report.exact} · Approximate: ${report.approximate} · Manual: ${report.manual_required} · Unknown: ${report.unknown}`);
+  lines.push('');
+
+  const items = report.items || [];
+  const sevLabel = { Ok: 'OK', Warn: 'WARN', Error: 'MANUAL', Info: 'UNKNOWN' };
+
+  if (!items.length) {
+    lines.push('No report items.');
+  } else {
+    for (const item of items) {
+      lines.push(`## [${sevLabel[item.severity] || item.severity}] ${item.category}`);
+      lines.push('');
+      if (item.message) lines.push(item.message);
+      if (item.source_snippet) {
+        lines.push('');
+        lines.push('**было:**');
+        lines.push('```');
+        lines.push(item.source_snippet);
+        lines.push('```');
+      }
+      if (item.target_snippet) {
+        lines.push('');
+        lines.push('**стало:**');
+        lines.push('```');
+        lines.push(item.target_snippet);
+        lines.push('```');
+      }
+      if (item.recommendation) {
+        lines.push('');
+        lines.push(`> ${item.recommendation}`);
+      }
+      lines.push('');
+    }
+  }
+
+  if (report.domain_mismatches && report.domain_mismatches.length) {
+    lines.push('## Domain mismatches');
+    lines.push('');
+    for (const m of report.domain_mismatches) {
+      lines.push(`- **${m.domain}**: ${m.detail}`);
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
 function setFilter(filter, btn) {
   currentFilter = filter;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1107,6 +1267,8 @@ function runConvert() {
   document.getElementById('output-empty').style.display = 'none';
   document.getElementById('output-highlighted').style.display = 'none';
   document.getElementById('copy-btn').style.display = 'none';
+  document.getElementById('download-config-btn').style.display = 'none';
+  document.getElementById('download-report-btn').style.display = 'none';
   document.getElementById('loading').classList.add('active');
   document.getElementById('report-empty').style.display = 'none';
   document.getElementById('report-body').style.display = 'none';
@@ -1125,14 +1287,20 @@ function runConvert() {
 
       if (!result.success) {
         _outputRawText = `# Ошибка: ${result.error}`;
+        _lastResult = null;
+        document.getElementById('download-config-btn').style.display = 'none';
+        document.getElementById('download-report-btn').style.display = 'none';
         showHighlightedOutput(_outputRawText);
         renderStats(result.report);
         allItems = [];
         renderReportItems();
       } else {
         _outputRawText = result.config_text;
+        _lastResult = result;
         showHighlightedOutput(result.config_text);
         document.getElementById('copy-btn').style.display = 'block';
+        document.getElementById('download-config-btn').style.display = 'block';
+        document.getElementById('download-report-btn').style.display = 'block';
         allItems = result.report.items || [];
         renderStats(result.report);
         renderReportItems();
@@ -1142,6 +1310,9 @@ function runConvert() {
       document.getElementById('loading').classList.remove('active');
       document.getElementById('report-loading').classList.remove('active');
       _outputRawText = `# Ошибка: ${e.message}`;
+      _lastResult = null;
+      document.getElementById('download-config-btn').style.display = 'none';
+      document.getElementById('download-report-btn').style.display = 'none';
       showHighlightedOutput(_outputRawText);
     }
 
