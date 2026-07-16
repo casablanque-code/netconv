@@ -555,6 +555,15 @@ textarea:focus { background: var(--bg); }
   background: var(--bg3);
 }
 
+/* Профильные вкладки L2/L3 — это не фильтр отображения, а переключатель
+   что именно рендерится (реально влияет на вывод), поэтому активная
+   вкладка выделена отдельно и заметнее, чем обычные filter-btn.active. */
+.profile-tabs .filter-btn.active {
+  border-color: var(--err);
+  color: var(--err);
+  background: var(--err-bg);
+}
+
 /* ── scrollbars ── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 
@@ -701,8 +710,8 @@ hljs.registerLanguage('netconfig', function(hljs) {
   <div class="header-actions">
     <span id="wasm-notice" class="wasm-notice">WASM не загружен — demo mode</span>
     <div class="profile-tabs">
-      <button class="filter-btn" id="tab-l2" onclick="setProfile('l2', this)">L2 (switching)</button>
-      <button class="filter-btn active" id="tab-l3" onclick="setProfile('l3', this)">L3 (routing)</button>
+      <button class="filter-btn active" id="tab-l2" onclick="setProfile('l2', this)">L2 (switching)</button>
+      <button class="filter-btn" id="tab-l3" onclick="setProfile('l3', this)">L3 (routing)</button>
     </div>
     <div class="vendor-selects">
       <select id="src-vendor">
@@ -810,7 +819,7 @@ hljs.registerLanguage('netconfig', function(hljs) {
 let allItems = [];
 let currentFilter = 'all';
 let wasmLoaded = false;
-let currentProfile = 'l3'; // 'l2' | 'l3' — по умолчанию L3, т.к. пример конфига роутерный
+let currentProfile = 'l2'; // 'l2' | 'l3' — default L2: most common first migration case (access switches)
 
 // ── профиль устройства: L2 (switching) / L3 (routing) ──
 // Разделение отражает реальную роль железа: свитч меняют на свитч,
