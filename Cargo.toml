@@ -16,7 +16,7 @@ resolver = "2"
 # workflow'ом .github/workflows/prepare-release.yml (Actions → Run
 # workflow → ввести версию), который сам коммитит и тегирует.
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 
 # profile.release для netconv-wasm (opt-level/lto) переехал сюда с
 # уровня пакета — cargo уже предупреждал: "profiles for the non root
