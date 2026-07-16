@@ -12,12 +12,27 @@ export function init(): void;
 * @returns {string}
 */
 export function convert_config(source_config: string, source_vendor: string, target_vendor: string): string;
+/**
+* То же самое, но с профилем устройства ("l2" | "l3" | "").
+* Для пары ios->vrp профиль реально фильтрует домен через
+* VrpL2Renderer/VrpL3Renderer — VLAN/switchport не попадают в L3-вывод
+* и наоборот. Для остальных пар (пока только ios->eltex) профиль ни
+* на что не влияет — Eltex ещё не разделён на l2/l3 (см. roadmap),
+* используется прежний EltexRenderer.
+* @param {string} source_config
+* @param {string} source_vendor
+* @param {string} target_vendor
+* @param {string} profile
+* @returns {string}
+*/
+export function convert_config_profiled(source_config: string, source_vendor: string, target_vendor: string, profile: string): string;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly convert_config: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+  readonly convert_config_profiled: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => void;
   readonly init: () => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_malloc: (a: number, b: number) => number;

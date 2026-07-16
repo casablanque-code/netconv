@@ -138,6 +138,44 @@ export function convert_config(source_config, source_vendor, target_vendor) {
     }
 }
 
+/**
+* То же самое, но с профилем устройства ("l2" | "l3" | "").
+* Для пары ios->vrp профиль реально фильтрует домен через
+* VrpL2Renderer/VrpL3Renderer — VLAN/switchport не попадают в L3-вывод
+* и наоборот. Для остальных пар (пока только ios->eltex) профиль ни
+* на что не влияет — Eltex ещё не разделён на l2/l3 (см. roadmap),
+* используется прежний EltexRenderer.
+* @param {string} source_config
+* @param {string} source_vendor
+* @param {string} target_vendor
+* @param {string} profile
+* @returns {string}
+*/
+export function convert_config_profiled(source_config, source_vendor, target_vendor, profile) {
+    let deferred5_0;
+    let deferred5_1;
+    try {
+        const retptr = wasm.__wbindgen_add_to_stack_pointer(-16);
+        const ptr0 = passStringToWasm0(source_config, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(source_vendor, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(target_vendor, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ptr3 = passStringToWasm0(profile, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len3 = WASM_VECTOR_LEN;
+        wasm.convert_config_profiled(retptr, ptr0, len0, ptr1, len1, ptr2, len2, ptr3, len3);
+        var r0 = getInt32Memory0()[retptr / 4 + 0];
+        var r1 = getInt32Memory0()[retptr / 4 + 1];
+        deferred5_0 = r0;
+        deferred5_1 = r1;
+        return getStringFromWasm0(r0, r1);
+    } finally {
+        wasm.__wbindgen_add_to_stack_pointer(16);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
+    }
+}
+
 function addHeapObject(obj) {
     if (heap_next === heap.length) heap.push(heap.length + 1);
     const idx = heap_next;
