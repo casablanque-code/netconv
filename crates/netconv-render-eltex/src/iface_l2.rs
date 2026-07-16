@@ -8,7 +8,11 @@ use netconv_core::report::ConversionReport;
 /// принципиально другие вещи с тем же самым `interface <name>` в IR.
 /// Смешивать их в одной функции — ровно та ошибка, от которой уходит
 /// весь этот рефакторинг.
-pub fn render_interfaces(cfg: &NetworkConfig, out: &mut Vec<String>, report: &mut ConversionReport) {
+pub fn render_interfaces(
+    cfg: &NetworkConfig,
+    out: &mut Vec<String>,
+    report: &mut ConversionReport,
+) {
     for iface in &cfg.interfaces {
         render_interface(iface, out, report);
     }
@@ -23,31 +27,55 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
 
     if let Some(desc) = &iface.description {
         out.push(format!(" description {}", desc));
-        report.add_exact("interface.description", &format!("description {} (on {})", desc, iface.name.original), &format!("description {}", desc));
+        report.add_exact(
+            "interface.description",
+            &format!("description {} (on {})", desc, iface.name.original),
+            &format!("description {}", desc),
+        );
     }
 
     if iface.shutdown {
         out.push(" shutdown".to_string());
-        report.add_exact("interface.shutdown", &format!("shutdown (on {})", iface.name.original), "shutdown");
+        report.add_exact(
+            "interface.shutdown",
+            &format!("shutdown (on {})", iface.name.original),
+            "shutdown",
+        );
     } else {
         out.push(" no shutdown".to_string());
-        report.add_exact("interface.shutdown", &format!("no shutdown (on {})", iface.name.original), "no shutdown");
+        report.add_exact(
+            "interface.shutdown",
+            &format!("no shutdown (on {})", iface.name.original),
+            "no shutdown",
+        );
     }
 
     if let Some(mtu) = iface.mtu {
         out.push(format!(" mtu {}", mtu));
-        report.add_exact("interface.mtu", &format!("mtu {} (on {})", mtu, iface.name.original), &format!("mtu {}", mtu));
+        report.add_exact(
+            "interface.mtu",
+            &format!("mtu {} (on {})", mtu, iface.name.original),
+            &format!("mtu {}", mtu),
+        );
     }
 
     if let Some(speed) = &iface.speed {
         match speed {
             InterfaceSpeed::Auto => {
                 out.push(" speed auto".to_string());
-                report.add_exact("interface.speed", &format!("speed auto (on {})", iface.name.original), "speed auto");
+                report.add_exact(
+                    "interface.speed",
+                    &format!("speed auto (on {})", iface.name.original),
+                    "speed auto",
+                );
             }
             InterfaceSpeed::Mbps(mbps) => {
                 out.push(format!(" speed {}", mbps));
-                report.add_exact("interface.speed", &format!("speed {} (on {})", mbps, iface.name.original), &format!("speed {}", mbps));
+                report.add_exact(
+                    "interface.speed",
+                    &format!("speed {} (on {})", mbps, iface.name.original),
+                    &format!("speed {}", mbps),
+                );
             }
         }
     }
@@ -59,7 +87,11 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
             Duplex::Auto => "auto",
         };
         out.push(format!(" duplex {}", d));
-        report.add_exact("interface.duplex", &format!("duplex {} (on {})", d, iface.name.original), &format!("duplex {}", d));
+        report.add_exact(
+            "interface.duplex",
+            &format!("duplex {} (on {})", d, iface.name.original),
+            &format!("duplex {}", d),
+        );
     }
 
     // IP-адресация (в основном для management SVI — `interface vlan N`).
@@ -136,21 +168,39 @@ fn render_interface(iface: &Interface, out: &mut Vec<String>, report: &mut Conve
     if iface.stp.portfast {
         // Подтверждено дословно: MES2324(config-if)# spanning-tree portfast
         out.push(" spanning-tree portfast".to_string());
-        report.add_exact("stp.portfast", &format!("spanning-tree portfast (on {})", iface.name.original), "spanning-tree portfast");
+        report.add_exact(
+            "stp.portfast",
+            &format!("spanning-tree portfast (on {})", iface.name.original),
+            "spanning-tree portfast",
+        );
     }
 
     if iface.stp.bpduguard {
         // Подтверждено дословно: MES2324(config-if)# spanning-tree bpduguard enable
         out.push(" spanning-tree bpduguard enable".to_string());
-        report.add_exact("stp.bpduguard", &format!("spanning-tree bpduguard enable (on {})", iface.name.original), "spanning-tree bpduguard enable");
+        report.add_exact(
+            "stp.bpduguard",
+            &format!(
+                "spanning-tree bpduguard enable (on {})",
+                iface.name.original
+            ),
+            "spanning-tree bpduguard enable",
+        );
     }
 
     if iface.stp.bpdufilter {
-        let is_trunk = iface.l2.as_ref().map(|l| l.mode == L2Mode::Trunk).unwrap_or(false);
+        let is_trunk = iface
+            .l2
+            .as_ref()
+            .map(|l| l.mode == L2Mode::Trunk)
+            .unwrap_or(false);
         if is_trunk {
             out.push(" ! ⚠ RISK: bpdu filtering NOT applied — trunk port detected.".to_string());
             out.push(" !   Applying it on trunk/uplink ports can cause STP loops.".to_string());
-            out.push(" !   Original config had 'spanning-tree bpdufilter enable' — review manually.".to_string());
+            out.push(
+                " !   Original config had 'spanning-tree bpdufilter enable' — review manually."
+                    .to_string(),
+            );
             report.add_manual(
                 "stp.bpdufilter",
                 "spanning-tree bpdufilter enable (on trunk port)",
@@ -188,7 +238,11 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
         L2Mode::Access => {
             // Подтверждено дословно: switchport mode access / switchport access vlan N
             out.push(" switchport mode access".to_string());
-            report.add_exact("interface.l2", &format!("switchport mode access (on {})", ctx), "switchport mode access");
+            report.add_exact(
+                "interface.l2",
+                &format!("switchport mode access (on {})", ctx),
+                "switchport mode access",
+            );
             if let Some(vlan) = l2.access_vlan {
                 out.push(format!(" switchport access vlan {}", vlan));
                 report.add_exact(
@@ -201,7 +255,11 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
         L2Mode::Trunk => {
             // Подтверждено дословно: switchport mode trunk
             out.push(" switchport mode trunk".to_string());
-            report.add_exact("interface.l2", &format!("switchport mode trunk (on {})", ctx), "switchport mode trunk");
+            report.add_exact(
+                "interface.l2",
+                &format!("switchport mode trunk (on {})", ctx),
+                "switchport mode trunk",
+            );
 
             if let Some(native) = l2.trunk_native {
                 out.push(format!(" switchport trunk native vlan {}", native));
@@ -213,7 +271,11 @@ fn render_l2(l2: &L2Config, out: &mut Vec<String>, report: &mut ConversionReport
             }
 
             if let Some(allowed) = &l2.trunk_allowed {
-                let vlan_list = allowed.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+                let vlan_list = allowed
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",");
                 out.push(format!(" switchport trunk allowed vlan add {}", vlan_list));
                 report.add_approximate(
                     "interface.l2.trunk_allowed",
