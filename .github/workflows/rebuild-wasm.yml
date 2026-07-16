@@ -1,0 +1,63 @@
+name: Rebuild WASM
+
+# web/wasm/*.wasm is a COMMITTED build artifact, not something generated
+# at deploy time — Cloudflare Pages' git integration just serves whatever
+# is in the repo on push. That means every fix to netconv-core, the IOS
+# parser, or either renderer was correct in source but invisible on the
+# live site until someone remembered to run wasm-pack and commit the
+# result by hand. This workflow does that automatically: rebuilds
+# web/wasm/ from source and commits it back to main. That push is then
+# picked up by Cloudflare's existing git-connected auto-deploy — no
+# wrangler-action, no CLOUDFLARE_API_TOKEN needed here at all.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'crates/netconv-wasm/**'
+      - 'crates/netconv-core/**'
+      - 'crates/netconv-parser-ios/**'
+      - 'crates/netconv-render-vrp/**'
+      - 'crates/netconv-render-eltex/**'
+      # NOTE: deliberately NOT watching web/wasm/** here — that's this
+      # workflow's own output. Watching it would make every rebuild
+      # trigger another rebuild.
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  rebuild-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM (release)
+        run: wasm-pack build crates/netconv-wasm --target web --out-dir ../../web/wasm --release
+
+      - name: Commit rebuilt WASM if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- web/wasm; then
+            echo "WASM output unchanged, nothing to commit"
+          else
+            git add web/wasm
+            git commit -m "chore: rebuild WASM [skip ci]"
+            git push origin HEAD:main
+          fi
