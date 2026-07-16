@@ -9,11 +9,10 @@ before 1.0.0, minor version bumps may still contain breaking changes.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-17
+
 ### Added
 
-- Web UI: file upload (drag-and-drop + file picker) for the source
-  config, and downloading the result as `<hostname>-<vendor>.cfg` plus
-  a readable Markdown conversion report alongside it.
 - Web UI: split-diff view. Toggles both panes into a read-only,
   line-annotated mode; clicking a flagged line highlights the
   corresponding line(s) on the other side and shows a popover with the
@@ -27,6 +26,13 @@ before 1.0.0, minor version bumps may still contain breaking changes.
   release. `Actions → Prepare Release → Run workflow`, type a version;
   it bumps the version, commits, tags, and pushes, which triggers
   `release.yml` automatically.
+- CI: `rebuild-wasm.yml` — rebuilds the committed `web/wasm/*.wasm`
+  binary from source on every push to `main` touching a WASM-feeding
+  crate, and commits the result back. `web/wasm/` is a checked-in build
+  artifact, not something generated at deploy time — without this,
+  fixes to the parser/renderers were correct in source but invisible on
+  the live site (Cloudflare's git integration just deploys whatever is
+  already committed) until someone remembered to rebuild by hand.
 
 ### Changed
 
@@ -40,6 +46,33 @@ before 1.0.0, minor version bumps may still contain breaking changes.
   `var(--text3)` on `var(--border)`), header no longer overflows
   un-wrapped below ~1100px width, report panel is resizable by
   dragging its top edge instead of a fixed 280px cap.
+- Web UI: L2 is now the default profile tab (was L3), and the active
+  profile tab is styled red — it changes what actually gets rendered,
+  not just a display filter, so it's deliberately more prominent than
+  the report's severity filter buttons, which share the same base class
+  but keep their neutral styling.
+
+### Fixed
+
+- Report accuracy: `source_snippet` for `interface.description`,
+  `interface.shutdown`, `interface.mtu`, `interface.speed`,
+  `interface.duplex`, `interface.l2` (access/trunk), `ospf.interface`,
+  `ospf.cost`, `ospf.timers`, `stp.portfast`, `stp.bpduguard`, and
+  `stp.guard_root` used to show the bare interface name (e.g.
+  `interface GigabitEthernet0/1`) as "before" instead of the actual
+  source command (e.g. `description ...`), while still being labeled an
+  exact match. Affected `VrpRenderer`/`VrpL2Renderer`/`VrpL3Renderer`
+  and both Eltex renderers. Fixed across all three files; regression
+  test added (`report_snippet_accuracy.rs`) so this can't silently
+  regress.
+
+## [0.2.0] — 2026-07-15
+
+### Added
+
+- Web UI: file upload (drag-and-drop + file picker) for the source
+  config, and downloading the result as `<hostname>-<vendor>.cfg` plus
+  a readable Markdown conversion report alongside it.
 
 ## [0.1.0] — 2026-07-14
 

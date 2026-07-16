@@ -291,6 +291,26 @@ cargo test -p netconv-parser-ios  # parser only (12 tests)
 
 ---
 
+## Releasing
+
+Version lives in exactly one place: `[workspace.package] version` in the
+root `Cargo.toml`. Every crate inherits it via `version.workspace = true`
+— nothing else to bump by hand.
+
+To cut a release: **Actions → Prepare Release → Run workflow**, enter a
+version (`X.Y.Z`, no `v` prefix). It bumps `Cargo.toml`, commits, tags,
+and pushes — which triggers `release.yml` (builds the CLI for
+linux/macos/windows, publishes a GitHub Release with the binaries).
+
+The web app's WASM binary (`web/wasm/*.wasm`) is a committed build
+artifact rebuilt automatically by `rebuild-wasm.yml` on every push to
+`main` that touches a WASM-feeding crate — no manual `wasm-pack` step
+required for that either.
+
+See [CHANGELOG.md](CHANGELOG.md) for what shipped in each version.
+
+---
+
 ## License
 
 MIT
