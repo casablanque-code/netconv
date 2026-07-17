@@ -1274,17 +1274,37 @@ function copyOutput() {
   navigator.clipboard.writeText(_outputRawText).then(() => showToast());
 }
 
-// ── split-diff view: клик по строке с предупреждением подсвечивает
-// соответствующую строку на другой стороне и показывает плашку с
-// пояснением. Связь строк — НЕ по номеру строки (репорт их не хранит),
-// а по индексу в allItems: buildAnnotatedLines гоняется по одному и
-// тому же массиву items для source и target, так что общий item index
-// у строки слева и строки справа и есть связь "было -> стало".
+// ── split-diff view: clicking a flagged line highlights the corresponding
+// line on the other side and shows a popover with the report message.
+// Lines are linked by shared index into `allItems` (the report doesn't
+// track line numbers) — buildAnnotatedLines walks the SAME items array,
+// in the SAME order, independently against the source text and the
+// target text.
+//
+// Matching is position-aware, not pure text search: each item is matched
+// starting from a cursor that only moves forward, so an earlier
+// interface's "switchport mode trunk" line can never be re-matched by a
+// later interface's identical "switchport mode trunk" item. Two
+// interfaces with byte-identical rendered lines are the common case
+// (most ports share config), so without this a click would highlight
+// every interface with that line, not just the one you clicked.
+function stripContextSuffix(s) {
+  // Some source_snippet values append " (on <interface>)" for readability
+  // in the report table (e.g. "shutdown (on interface Gi0/1)"). That
+  // suffix must NOT be used for line matching — it would make the plain
+  // "interface Gi0/1" header line itself match, since it's a literal
+  // substring of the snippet. Strip it before comparing against real lines.
+  return s.replace(/\s*\(on [^)]*\)\s*$/, '').trim();
+}
+
 function snippetParts(snippet) {
-  // Некоторые item'ы комбинируют несколько исходных команд через ' / '
-  // (например VLAN: "vlan 10 / name USERS") — разбиваем для построчного
-  // сопоставления с реальными строками конфига.
-  return String(snippet || '').split(' / ').map(s => s.trim()).filter(Boolean);
+  // Some items combine multiple source commands with ' / ' (e.g. VLAN:
+  // "vlan 10 / name USERS") — split for per-line matching against real
+  // config lines.
+  return String(snippet || '')
+    .split(' / ')
+    .map(s => stripContextSuffix(s.trim()))
+    .filter(Boolean);
 }
 
 function severityRank(sev) {
@@ -1293,29 +1313,45 @@ function severityRank(sev) {
 
 function buildAnnotatedLines(text, items, field) {
   const rawLines = (text || '').split('\n');
-  return rawLines.map(lineText => {
-    const trimmed = lineText.trim();
-    let bestSev = null;
-    let bestRank = -1;
-    const matchedIdx = [];
+  const lines = rawLines.map(t => ({ text: t, sevClass: '', itemIndices: [], _rank: -1 }));
 
-    if (trimmed) {
-      items.forEach((item, idx) => {
-        const snippet = item[field];
-        if (!snippet) return;
-        const parts = snippetParts(snippet);
-        const hit = parts.some(p => p.length >= 4 && (trimmed === p || trimmed.includes(p) || p.includes(trimmed)));
-        if (hit) {
-          matchedIdx.push(idx);
-          const r = severityRank(item.severity);
-          if (r > bestRank) { bestRank = r; bestSev = item.severity; }
-        }
-      });
+  let cursor = 0; // monotonically non-decreasing — never re-scan a line already consumed by an earlier item
+  items.forEach((item, idx) => {
+    const snippet = item[field];
+    if (!snippet) return;
+    const parts = snippetParts(snippet).filter(p => p.length >= 4);
+    if (!parts.length) return;
+
+    // Pass 1: exact match (after trim) — the reliable case, since
+    // source_snippet/target_snippet are reconstructed literal command text.
+    let matchAt = -1;
+    for (let i = cursor; i < lines.length; i++) {
+      const trimmed = lines[i].text.trim();
+      if (trimmed && parts.includes(trimmed)) { matchAt = i; break; }
+    }
+    // Pass 2: fall back to substring containment, only if no exact match
+    // was found. Still scoped to start at cursor, so it can't jump
+    // backwards into an already-consumed region either.
+    if (matchAt === -1) {
+      for (let i = cursor; i < lines.length; i++) {
+        const trimmed = lines[i].text.trim();
+        if (!trimmed) continue;
+        if (parts.some(p => trimmed.includes(p) || p.includes(trimmed))) { matchAt = i; break; }
+      }
     }
 
-    const sevClass = bestSev ? { Ok: 'dl-ok', Warn: 'dl-warn', Error: 'dl-err', Info: 'dl-info' }[bestSev] : '';
-    return { text: lineText, sevClass: sevClass || '', itemIndices: matchedIdx };
+    if (matchAt !== -1) {
+      lines[matchAt].itemIndices.push(idx);
+      const r = severityRank(item.severity);
+      if (r > lines[matchAt]._rank) {
+        lines[matchAt]._rank = r;
+        lines[matchAt].sevClass = { Ok: 'dl-ok', Warn: 'dl-warn', Error: 'dl-err', Info: 'dl-info' }[item.severity] || '';
+      }
+      cursor = matchAt + 1; // strictly past this line — the key fix for duplicate-text lines across interfaces
+    }
   });
+
+  return lines.map(({ text, sevClass, itemIndices }) => ({ text, sevClass, itemIndices }));
 }
 
 function renderAnnotated(containerEl, lines, side) {
