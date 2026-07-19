@@ -30,7 +30,10 @@ interface GigabitEthernet0/1
 "#;
 
 fn find_source_snippet<'a>(items: &'a [ReportItem], category: &str) -> Option<&'a str> {
-    items.iter().find(|i| i.category == category).map(|i| i.source_snippet.as_str())
+    items
+        .iter()
+        .find(|i| i.category == category)
+        .map(|i| i.source_snippet.as_str())
 }
 
 #[test]
@@ -63,14 +66,16 @@ fn vrp_mtu_and_duplex_snippets_are_not_bare_interface_names() {
         mtu
     );
 
-    let duplex = find_source_snippet(&output.report.items, "interface.duplex").expect("duplex item");
+    let duplex =
+        find_source_snippet(&output.report.items, "interface.duplex").expect("duplex item");
     assert!(duplex.contains("duplex full"), "получено: {}", duplex);
 }
 
 #[test]
 fn vrp_l2_snippet_shows_switchport_command_not_interface_name() {
     let output = convert(&IosParser, &VrpRenderer, CONFIG).expect("should convert");
-    let snippet = find_source_snippet(&output.report.items, "interface.l2").expect("interface.l2 item");
+    let snippet =
+        find_source_snippet(&output.report.items, "interface.l2").expect("interface.l2 item");
     assert!(
         snippet.contains("switchport mode access"),
         "должна быть видна реальная switchport-команда, получено: {}",
@@ -81,14 +86,20 @@ fn vrp_l2_snippet_shows_switchport_command_not_interface_name() {
 #[test]
 fn eltex_l2_stp_portfast_snippet_is_the_real_command() {
     let output = convert(&IosParser, &EltexL2Renderer, CONFIG).expect("should convert");
-    let snippet = find_source_snippet(&output.report.items, "stp.portfast").expect("stp.portfast item");
-    assert!(snippet.contains("spanning-tree portfast"), "получено: {}", snippet);
+    let snippet =
+        find_source_snippet(&output.report.items, "stp.portfast").expect("stp.portfast item");
+    assert!(
+        snippet.contains("spanning-tree portfast"),
+        "получено: {}",
+        snippet
+    );
 }
 
 #[test]
 fn eltex_esr_description_snippet_contains_actual_text() {
     let output = convert(&IosParser, &EltexRenderer, CONFIG).expect("should convert");
-    let snippet = find_source_snippet(&output.report.items, "interface.description").expect("description item");
+    let snippet = find_source_snippet(&output.report.items, "interface.description")
+        .expect("description item");
     assert!(snippet.contains("LAN - Office"), "получено: {}", snippet);
 }
 
@@ -127,11 +138,24 @@ fn vrp_ospf_passive_snippet_is_not_duplicated_across_interfaces() {
         .map(|i| i.source_snippet.as_str())
         .collect();
 
-    assert_eq!(snippets.len(), 2, "expected one ospf.passive item per passive interface, got: {:?}", snippets);
+    assert_eq!(
+        snippets.len(),
+        2,
+        "expected one ospf.passive item per passive interface, got: {:?}",
+        snippets
+    );
     assert_ne!(
         snippets[0], snippets[1],
         "two different interfaces must not produce identical source_snippet — this is exactly what broke split-diff line linking"
     );
-    assert!(snippets[0].contains("GigabitEthernet0/0"), "got: {}", snippets[0]);
-    assert!(snippets[1].contains("GigabitEthernet0/1"), "got: {}", snippets[1]);
+    assert!(
+        snippets[0].contains("GigabitEthernet0/0"),
+        "got: {}",
+        snippets[0]
+    );
+    assert!(
+        snippets[1].contains("GigabitEthernet0/1"),
+        "got: {}",
+        snippets[1]
+    );
 }
