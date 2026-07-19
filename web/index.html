@@ -1288,6 +1288,15 @@ function copyOutput() {
 // interfaces with byte-identical rendered lines are the common case
 // (most ports share config), so without this a click would highlight
 // every interface with that line, not just the one you clicked.
+function normalizeWs(s) {
+  // Collapse runs of internal whitespace to a single space, in addition to
+  // trimming the ends. Hand-edited Cisco configs routinely have double
+  // spaces, tabs, or copy-paste artifacts that survive a plain .trim() and
+  // would otherwise defeat an exact-text match against an otherwise
+  // correct reconstruction.
+  return s.replace(/\s+/g, ' ').trim();
+}
+
 function stripContextSuffix(s) {
   // Some source_snippet values append " (on <interface>)" for readability
   // in the report table (e.g. "shutdown (on interface Gi0/1)"). That
@@ -1303,7 +1312,7 @@ function snippetParts(snippet) {
   // config lines.
   return String(snippet || '')
     .split(' / ')
-    .map(s => stripContextSuffix(s.trim()))
+    .map(s => normalizeWs(stripContextSuffix(s.trim())))
     .filter(Boolean);
 }
 
@@ -1311,21 +1320,32 @@ function severityRank(sev) {
   return { Error: 3, Warn: 2, Info: 1, Ok: 0 }[sev] ?? -1;
 }
 
+// Bounded on purpose — see the comment inside buildAnnotatedLines.
+const DIFF_FALLBACK_WINDOW = 8;
+
 function buildAnnotatedLines(text, items, field) {
   const rawLines = (text || '').split('\n');
   const lines = rawLines.map(t => ({ text: t, sevClass: '', itemIndices: [], _rank: -1 }));
 
-  // EXACT MATCH ONLY. A substring-fallback pass used to exist here and was
-  // removed: proven with a Node harness that if it ever matched the wrong
-  // (usually much later) line for one item, the cursor got dragged forward
-  // past that point, and every legitimate item afterwards silently failed
-  // to match anything for the REST OF THE FILE — forward-only search could
-  // no longer reach a line that was now "behind" the cursor. A single item
-  // with a generic short snippet substring-matching an unrelated line near
-  // the end of the file wiped out every subsequent legitimate match this
-  // way. Exact match is stricter but fails one line at a time, never a
-  // cascade over the whole document.
-  let cursor = 0; // monotonically non-decreasing — never re-scan a line already consumed by an earlier item
+  // Pass 1 (exact match, after whitespace normalization) scans the WHOLE
+  // remaining document forward from the cursor — safe, because exact
+  // string equality essentially never coincidentally matches unrelated
+  // content; the monotonic cursor exists to disambiguate genuine
+  // duplicates (two interfaces with the same command), not to guard
+  // against false positives.
+  //
+  // Pass 2 (substring fallback) is intentionally BOUNDED to a small
+  // window right after the cursor, not the rest of the file. An earlier
+  // version scanned all the way to the end of the document on fallback,
+  // and a single item whose snippet didn't match anything nearby could
+  // substring-match an unrelated line far away, dragging the cursor
+  // there and silently breaking every legitimate match for the rest of
+  // the file (proven with a Node harness). A bounded window keeps the
+  // near-miss recovery — normalization differences between parsed IR
+  // values and raw source text, most common in ACL/NAT/routing entries —
+  // without the far-jump risk: genuine content is always close to the
+  // cursor already, never hundreds of lines away.
+  let cursor = 0;
   items.forEach((item, idx) => {
     const snippet = item[field];
     if (!snippet) return;
@@ -1334,8 +1354,17 @@ function buildAnnotatedLines(text, items, field) {
 
     let matchAt = -1;
     for (let i = cursor; i < lines.length; i++) {
-      const trimmed = lines[i].text.trim();
+      const trimmed = normalizeWs(lines[i].text);
       if (trimmed && parts.includes(trimmed)) { matchAt = i; break; }
+    }
+
+    if (matchAt === -1) {
+      const windowEnd = Math.min(lines.length, cursor + DIFF_FALLBACK_WINDOW);
+      for (let i = cursor; i < windowEnd; i++) {
+        const trimmed = normalizeWs(lines[i].text);
+        if (!trimmed) continue;
+        if (parts.some(p => trimmed.includes(p) || p.includes(trimmed))) { matchAt = i; break; }
+      }
     }
 
     if (matchAt !== -1) {
@@ -1347,7 +1376,8 @@ function buildAnnotatedLines(text, items, field) {
       }
       cursor = matchAt + 1; // strictly past this line — the key fix for duplicate-text lines across interfaces
     }
-    // No match: cursor stays put. This item just doesn't highlight
+    // No match found (in the whole document for pass 1, or in the window
+    // for pass 2): cursor stays put. This item just doesn't highlight
     // anything — harmless, and the next item still gets a fair,
     // uncorrupted search from the same position.
   });
