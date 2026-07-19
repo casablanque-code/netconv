@@ -1315,29 +1315,27 @@ function buildAnnotatedLines(text, items, field) {
   const rawLines = (text || '').split('\n');
   const lines = rawLines.map(t => ({ text: t, sevClass: '', itemIndices: [], _rank: -1 }));
 
+  // EXACT MATCH ONLY. A substring-fallback pass used to exist here and was
+  // removed: proven with a Node harness that if it ever matched the wrong
+  // (usually much later) line for one item, the cursor got dragged forward
+  // past that point, and every legitimate item afterwards silently failed
+  // to match anything for the REST OF THE FILE — forward-only search could
+  // no longer reach a line that was now "behind" the cursor. A single item
+  // with a generic short snippet substring-matching an unrelated line near
+  // the end of the file wiped out every subsequent legitimate match this
+  // way. Exact match is stricter but fails one line at a time, never a
+  // cascade over the whole document.
   let cursor = 0; // monotonically non-decreasing — never re-scan a line already consumed by an earlier item
   items.forEach((item, idx) => {
     const snippet = item[field];
     if (!snippet) return;
-    const parts = snippetParts(snippet).filter(p => p.length >= 4);
+    const parts = snippetParts(snippet).filter(p => p.length >= 2);
     if (!parts.length) return;
 
-    // Pass 1: exact match (after trim) — the reliable case, since
-    // source_snippet/target_snippet are reconstructed literal command text.
     let matchAt = -1;
     for (let i = cursor; i < lines.length; i++) {
       const trimmed = lines[i].text.trim();
       if (trimmed && parts.includes(trimmed)) { matchAt = i; break; }
-    }
-    // Pass 2: fall back to substring containment, only if no exact match
-    // was found. Still scoped to start at cursor, so it can't jump
-    // backwards into an already-consumed region either.
-    if (matchAt === -1) {
-      for (let i = cursor; i < lines.length; i++) {
-        const trimmed = lines[i].text.trim();
-        if (!trimmed) continue;
-        if (parts.some(p => trimmed.includes(p) || p.includes(trimmed))) { matchAt = i; break; }
-      }
     }
 
     if (matchAt !== -1) {
@@ -1349,6 +1347,9 @@ function buildAnnotatedLines(text, items, field) {
       }
       cursor = matchAt + 1; // strictly past this line — the key fix for duplicate-text lines across interfaces
     }
+    // No match: cursor stays put. This item just doesn't highlight
+    // anything — harmless, and the next item still gets a fair,
+    // uncorrupted search from the same position.
   });
 
   return lines.map(({ text, sevClass, itemIndices }) => ({ text, sevClass, itemIndices }));
