@@ -1,7 +1,7 @@
 {
   "name": "netconv-wasm",
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "files": [
     "netconv_wasm_bg.wasm",
     "netconv_wasm.js",
